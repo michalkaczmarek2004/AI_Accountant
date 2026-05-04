@@ -3,12 +3,8 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
-import json
 import time
 from typing import Any, Callable
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
 import pandas as pd
 
@@ -21,66 +17,16 @@ from .exceptions import (
     InvalidSolanaAddressError,
     SolanaDataFetcherError,
 )
+from .transport import (
+    TransportError,
+    _SimpleResponse,
+    _UrllibSession,
+    _parse_retry_after,
+)
 
 
 LAMPORTS_PER_SOL = Decimal("1000000000")
 DEFAULT_BASE_URL = "https://api-mainnet.helius-rpc.com"
-
-
-class TransportError(Exception):
-    """Raised by the internal HTTP transport when a request cannot be completed."""
-
-
-class _SimpleResponse:
-    def __init__(
-        self,
-        status_code: int,
-        body: str,
-        headers: Mapping[str, str] | None = None,
-    ) -> None:
-        self.status_code = status_code
-        self.text = body
-        self.headers = dict(headers or {})
-
-    def json(self) -> Any:
-        return json.loads(self.text)
-
-
-class _UrllibSession:
-    def get(
-        self,
-        url: str,
-        *,
-        params: Mapping[str, Any] | None = None,
-        timeout: float | None = None,
-    ) -> _SimpleResponse:
-        query = urlencode(params or {}, doseq=True)
-        full_url = f"{url}?{query}" if query else url
-        request = Request(
-            full_url,
-            headers={"Accept": "application/json"},
-            method="GET",
-        )
-        try:
-            with urlopen(request, timeout=timeout) as response:
-                body = response.read().decode("utf-8", errors="replace")
-                return _SimpleResponse(
-                    status_code=response.getcode(),
-                    body=body,
-                    headers=dict(response.headers.items()),
-                )
-        except HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            return _SimpleResponse(
-                status_code=exc.code,
-                body=body,
-                headers=dict(exc.headers.items()) if exc.headers else {},
-            )
-        except URLError as exc:
-            raise TransportError(str(exc)) from exc
-
-    def close(self) -> None:
-        return None
 
 
 class SolanaDataFetcher:
@@ -418,14 +364,9 @@ class SolanaDataFetcher:
         return f"{default} (status={response.status_code})."
 
     def _compute_retry_delay(self, response: Any, attempt: int) -> float:
-        retry_after_header = response.headers.get("Retry-After")
-        if retry_after_header:
-            try:
-                retry_after = float(retry_after_header)
-                if retry_after >= 0:
-                    return retry_after
-            except ValueError:
-                pass
+        delay = _parse_retry_after(response.headers.get("Retry-After"))
+        if delay is not None:
+            return delay
         return self._compute_backoff_delay(attempt)
 
     def _compute_backoff_delay(self, attempt: int) -> float:
