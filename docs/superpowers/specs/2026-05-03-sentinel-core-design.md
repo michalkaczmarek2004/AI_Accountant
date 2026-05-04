@@ -646,6 +646,13 @@ All tests use `app.test_client()` — no live server.
 
 ## 13. Tech Debt & Extension Points
 
+> **Update 2026-05-04:** The pre-Sprint-2 task to extract `_build_transaction_row`
+> is complete. New code should call
+> `TransactionParser(wallet_address).parse(raw_tx)` from `ai_accountant`. The
+> `SolanaDataFetcher._build_transaction_row(wallet, tx)` alias remains for one
+> release as a deprecated delegating wrapper — the Sentinel normalizer can
+> switch to `TransactionParser` whenever convenient.
+
 | Item | Target |
 |---|---|
 | Extract `_build_transaction_row` into public `parse_transaction(wallet_address, raw_tx) -> dict` | Pre-Sprint-2 task |
