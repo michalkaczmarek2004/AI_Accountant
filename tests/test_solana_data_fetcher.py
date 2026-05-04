@@ -123,6 +123,14 @@ class SolanaDataFetcherTests(unittest.TestCase):
         self.assertEqual(row["native_transfer_net_sol"], Decimal("-0.15"))
         self.assertEqual(row["native_net_sol"], Decimal("-0.150005"))
         self.assertEqual(row["net_flow"]["SOL"], Decimal("-0.150005"))
+        self.assertEqual(
+            row["net_flow"]["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
+            Decimal("-25"),
+        )
+        self.assertEqual(
+            row["net_flow"]["DezXAZ8z7PnrnRJjz3wXBoRgixCa6YaB1pPB263rE4ZW"],
+            Decimal("1000"),
+        )
         self.assertEqual(row["status"], "succeeded")
 
         self.assertEqual(
@@ -189,7 +197,7 @@ class SolanaDataFetcherTests(unittest.TestCase):
                 {
                     "symbol": "BONK",
                     "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6YaB1pPB263rE4ZW",
-                    "label": "BONK (DezX...E4ZW)",
+                    "label": "BONK (DezXAZ8z7PnrnRJjz3wXBoRgixCa6YaB1pPB263rE4ZW)",
                     "in": Decimal("1000"),
                     "out": Decimal("0"),
                     "net": Decimal("1000"),
@@ -197,7 +205,7 @@ class SolanaDataFetcherTests(unittest.TestCase):
                 {
                     "symbol": "USDC",
                     "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-                    "label": "USDC (EPjF...Dt1v)",
+                    "label": "USDC (EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v)",
                     "in": Decimal("0"),
                     "out": Decimal("25"),
                     "net": Decimal("-25"),
