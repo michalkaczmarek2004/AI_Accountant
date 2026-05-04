@@ -12,6 +12,15 @@ from urllib.request import Request, urlopen
 
 import pandas as pd
 
+from .exceptions import (
+    HeliusAPIError,
+    HeliusAuthenticationError,
+    HeliusPermissionError,
+    HeliusRateLimitError,
+    InvalidSolanaAddressError,
+    SolanaDataFetcherError,
+)
+
 
 LAMPORTS_PER_SOL = Decimal("1000000000")
 DEFAULT_BASE_URL = "https://api-mainnet.helius-rpc.com"
@@ -73,34 +82,6 @@ class _UrllibSession:
 
     def close(self) -> None:
         return None
-
-
-class SolanaDataFetcherError(Exception):
-    """Base exception for Solana data fetching errors."""
-
-
-class InvalidSolanaAddressError(SolanaDataFetcherError):
-    """Raised when a wallet address is not a valid Solana public key."""
-
-
-class HeliusAPIError(SolanaDataFetcherError):
-    """Raised when the Helius API returns an unrecoverable error."""
-
-    def __init__(self, message: str, *, status_code: int | None = None) -> None:
-        super().__init__(message)
-        self.status_code = status_code
-
-
-class HeliusAuthenticationError(HeliusAPIError):
-    """Raised when the provided API key is rejected by Helius."""
-
-
-class HeliusPermissionError(HeliusAPIError):
-    """Raised when the caller cannot access the requested Helius resource."""
-
-
-class HeliusRateLimitError(HeliusAPIError):
-    """Raised when the Helius rate limit is exceeded after all retries."""
 
 
 class SolanaDataFetcher:

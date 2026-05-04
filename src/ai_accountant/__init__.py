@@ -1,12 +1,12 @@
-from .solana_data_fetcher import (
+from .exceptions import (
     HeliusAPIError,
     HeliusAuthenticationError,
     HeliusPermissionError,
     HeliusRateLimitError,
     InvalidSolanaAddressError,
-    SolanaDataFetcher,
     SolanaDataFetcherError,
 )
+from .solana_data_fetcher import SolanaDataFetcher
 
 __all__ = [
     "HeliusAPIError",
