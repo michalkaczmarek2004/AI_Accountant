@@ -18,46 +18,97 @@ Run tests (pytest is configured in `pyproject.toml` with `pythonpath = ["src"]` 
 
 ```powershell
 pytest
-pytest tests/test_solana_data_fetcher.py                                   # single file
-pytest tests/test_solana_data_fetcher.py::SolanaDataFetcherTests::test_fetch_transaction_history_uses_before_signature_pagination  # single test
+pytest tests/test_client.py                                                # single file
+pytest tests/test_client.py::SolanaDataFetcherTests::test_fetch_transaction_history_uses_before_signature_pagination  # single test
 ```
 
-Tests use stdlib `unittest`, so they can also be run directly: `python -m unittest tests.test_solana_data_fetcher`.
+Tests use stdlib `unittest`, so they can also be run directly: `python -m unittest tests.test_client`.
 
-There is no linter or formatter configured.
+Lint and format (ruff is configured in `pyproject.toml`; `line-length = 100`, `target-version = "py310"`):
+
+```powershell
+ruff check .
+ruff format .
+```
 
 ## Architecture
 
-The whole library is one module: `src/ai_accountant/solana_data_fetcher.py`. `__init__.py` only re-exports the public surface (`SolanaDataFetcher` plus the exception hierarchy).
+The package lives in `src/ai_accountant/` and is split into seven focused modules:
 
-`SolanaDataFetcher` is the single entry point and combines three concerns that need to stay coordinated:
+- **`exceptions.py`** — `SolanaDataFetcherError` hierarchy (`InvalidSolanaAddressError`, `HeliusAPIError`, `HeliusAuthenticationError`, `HeliusPermissionError`, `HeliusRateLimitError`).
+- **`addresses.py`** — `validate_address` + `_decode_base58`. Does its own Base58 decode (no `solana`/`base58` dep); requires exactly 32 bytes — call sites rely on it raising `InvalidSolanaAddressError` *before* any HTTP request.
+- **`transport.py`** — `SessionProtocol` / `ResponseProtocol` (structural `typing.Protocol`), `_SimpleResponse` with `_CaseInsensitiveHeaders`, `_UrllibSession` (wraps `urllib.request` — no `requests` dep), `_parse_retry_after` (handles both numeric seconds and RFC-7231 HTTP-date), `TransportError`.
+- **`parser.py`** — `TransactionParser` (public class, bound to a single wallet address).
+- **`dataframe.py`** — `DATAFRAME_COLUMNS` list + `to_dataframe(parser, transactions)`.
+- **`client.py`** — `SolanaDataFetcher` (HTTP orchestration, retry/pagination, DataFrame helper).
+- **`report.py`** — `render_html_report`, `transaction_export_frame`, `write_wallet_report`. Hand-written self-contained HTML + flat CSV over the parser-level DataFrame; no templating engine, no JS, no external assets. Operates on `DATAFRAME_COLUMNS` only — does not depend on the audit-pipeline scaffolds in `examples/`.
+- **`solana_data_fetcher.py`** — backwards-compat re-export shim; scheduled for removal in a future release.
 
-1. **HTTP transport** — `_UrllibSession` wraps `urllib.request` to avoid a `requests` dependency. It always returns a `_SimpleResponse` (even for HTTP errors) so the retry logic can branch on `status_code`. Network-level failures raise `TransportError` (internal). Tests substitute a `FakeSession` via the `session=` constructor kwarg — keep that injection seam intact.
+`__init__.py` re-exports the full public surface: `SolanaDataFetcher`, `TransactionParser`, `validate_address`, `DATAFRAME_COLUMNS`, the exception hierarchy, and the report helpers (`render_html_report`, `transaction_export_frame`, `write_wallet_report`).
 
-2. **Pagination + retry loop** (`fetch_transaction_history` → `_request_transaction_page`) — Helius paginates by signature cursor, not page number:
-   - `sort_order="desc"` (default) walks backward using `before-signature`; `sort_order="asc"` uses `after-signature`. Mixing `before`/`after` with the wrong `sort_order` raises `ValueError`.
-   - The loop deduplicates by signature and breaks when the cursor stops advancing or repeats, so a misbehaving Helius response can't cause an infinite loop.
-   - Retries cover only `429` and `5xx`. `Retry-After` (when numeric and ≥ 0) overrides the exponential backoff (`backoff_factor * 2**attempt`). Sleep is injected via `sleep_func=` so tests don't actually wait.
-   - Status-code mapping: `401 → HeliusAuthenticationError`, `403 → HeliusPermissionError`, `429 (exhausted) → HeliusRateLimitError`, `400` mentioning "address" → `InvalidSolanaAddressError`, everything else → `HeliusAPIError` (with `status_code`). All inherit from `SolanaDataFetcherError`.
+### HTTP transport and retry (`client.py`)
 
-3. **Normalization to DataFrame** (`transactions_to_dataframe` → `_build_transaction_row` → `_parse_wallet_movements`) — produces a row per transaction with the fixed schema in `SolanaDataFetcher.DATAFRAME_COLUMNS`. Two non-obvious invariants:
-   - **All financial values are `Decimal`** (lamports → SOL via `LAMPORTS_PER_SOL = Decimal("1e9")`, token amounts via `_coerce_decimal`). Do not introduce `float` arithmetic into fee/flow paths — the tests assert exact `Decimal` equality and the whole point is accounting precision.
-   - **Wallet-perspective parsing**: `_parse_wallet_movements` splits each transfer into `movements_in` / `movements_out` from the audited wallet's point of view, ignoring self-transfers. `native_net_sol` subtracts the fee only when `feePayer == wallet_address` (`fee_paid_by_wallet`). Token flows are aggregated by `(symbol, mint)` and rendered with `_asset_label` (e.g. `USDC (EPjF...Dt1v)`).
+`_UrllibSession` always returns a `_SimpleResponse` (even for HTTP errors) so retry logic can branch on `status_code`. Network failures raise `TransportError` (internal, translated to `HeliusAPIError` after retry exhaustion). Tests substitute a `FakeSession` via the `session=` constructor kwarg — keep that injection seam intact.
 
-`validate_address` does its own Base58 decode (no `solana`/`base58` dep) and requires the result to be exactly 32 bytes — call sites rely on it raising `InvalidSolanaAddressError` *before* any HTTP request is made.
+Retries cover only `429` and `5xx`. `Retry-After` (numeric seconds or HTTP-date) overrides exponential backoff (`backoff_factor * 2**attempt`). Sleep is injected via `sleep_func=` so tests don't actually wait. Status-code mapping: `401 → HeliusAuthenticationError`, `403 → HeliusPermissionError`, `429 (exhausted) → HeliusRateLimitError`, `400` mentioning "address" → `InvalidSolanaAddressError`, else → `HeliusAPIError`.
+
+### Pagination (`client.py`)
+
+`fetch_transaction_history` delegates to `iter_transactions`, a lazy generator. Helius paginates by signature cursor (not page number): `sort_order="desc"` uses `before-signature`; `sort_order="asc"` uses `after-signature`. Mixing them raises `ValueError`. The loop deduplicates by signature and breaks when the cursor stops advancing. `on_cursor_advance(cursor)` callback fires per-page after yielding and before the next fetch — callers use it for resumable pagination. The callback is **not** called when pagination terminates.
+
+### Normalization (`parser.py`, `dataframe.py`)
+
+`TransactionParser` is instantiated per wallet address. Its `parse(transaction)` method produces a row dict matching `DATAFRAME_COLUMNS` exactly. Two critical invariants:
+
+- **All financial values are `Decimal`** (lamports → SOL via `LAMPORTS_PER_SOL = Decimal("1e9")`, token amounts via `_coerce_decimal`). Do not introduce `float` arithmetic into fee/flow paths — tests assert exact `Decimal` equality.
+- **Token-flow aggregation keys are full mint strings** (not truncated display labels). `net_flow` keys: literal `"SOL"` for native, full mint address for tokens. `token_flow_details` entries contain `"label"` (e.g. `"USDC (EPjF...full...Dt1v)"`) for display only — never use `label` as a dict key.
+
+**Wallet-perspective parsing**: movements are split into `movements_in` / `movements_out` from the audited wallet's point of view, ignoring self-transfers. `native_net_sol` subtracts the fee only when `feePayer == wallet_address`. Failed-transaction detection uses an explicit `transactionError is not None` check (not truthiness) — `{}` and `[]` are failures.
+
+A `parser_factory: Callable[[str], TransactionParser] | None` kwarg on `SolanaDataFetcher` lets callers inject custom parser subclasses.
+
+### Tests
+
+Test files mirror the module split:
+
+| File | Covers |
+|---|---|
+| `tests/test_addresses.py` | `validate_address`, Base58 decode |
+| `tests/test_transport.py` | `_parse_retry_after`, `_CaseInsensitiveHeaders` |
+| `tests/test_parser.py` | `TransactionParser.parse`, collision/mint-key invariants |
+| `tests/test_dataframe.py` | `to_dataframe`, `DATAFRAME_COLUMNS` |
+| `tests/test_client.py` | `SolanaDataFetcher`, pagination, retry, `iter_transactions` |
+| `tests/test_report.py` | `render_html_report`, `transaction_export_frame`, `write_wallet_report` |
+| `tests/test_compat_shim.py` | `from ai_accountant.solana_data_fetcher import ...` still works |
 
 ## Examples
 
-`examples/` holds **illustrative scaffolds, not API surface**. They exist to show how a downstream pipeline can be built on top of `SolanaDataFetcher`. Both run offline (no Helius key needed) and depend only on `pandas` + the package itself. Run with `python examples/<file>.py`.
+`examples/` holds two categories of scripts. Neither is covered by the test suite — the directory is intentionally outside `pytest testpaths`. Run any of them with `python examples/<file>.py`.
 
-- **`examples/audit_demo.py`** — synthetic Helius-shaped transactions → `SolanaDataFetcher.transactions_to_dataframe(...)` → FIFO cost-basis ledger → classifier → printed advisory report. Uses an `_OfflineSession` whose `.get()` raises, proving the `transactions_to_dataframe` path makes no HTTP calls. Prices come from a static `PRICE_USD` stub; assumes US federal / FIFO / USD.
-- **`examples/legal_grounding.py`** — wraps `audit_demo` (direct import via `sys.path` manipulation, so the two files are coupled) with a RAG-style retrieval layer that attaches statute citations to every classification. Tier-aware (`CONFIRMED` / `DRAFT` / `PROPOSED` / `INTERPRETATION`).
+### Public-API consumers
 
-Two design points in `legal_grounding.py` to preserve if you extend it:
+These call the package's public surface and double as documentation for downstream callers. Do not change their contract without considering downstream impact.
 
-1. **The `BLOCKING_VERIFICATION_GATE`** is intentional. Every `LegalSource.verbatim_excerpt` defaults to a `PLACEHOLDER` token and the report counts how many citations are still unverified. The gate is the structural anti-hallucination guard — in production the retriever populates `verbatim_excerpt`, the count drops to zero, and only then is the report authoritative. Do not weaken or default this away.
-2. **`holding_summary` is metadata, not authority.** It's a paraphrase to make the report readable; only `verbatim_excerpt` is treated as a citation. Don't conflate them.
+- **`examples/demo_html_report.py`** — runs `write_wallet_report` over the synthetic dataset from `audit_demo.py`. No Helius key needed.
+- **`examples/real_wallet_report.py`** — fetches via `SolanaDataFetcher`, then renders with `write_wallet_report`. Requires `HELIUS_API_KEY` (env var or `--api-key`) and a wallet (`SOLANA_WALLET` or `--wallet`).
 
-Known limitation worth fixing if you build on this: the `[CONFLICT]` detector in `render_legal_report` does substring matching on `holding_summary` for `"NOT"`, which produces false positives (e.g., MiCA "does NOT itself impose income-tax characterization" trips it even though MiCA isn't negating anything). A structured `taxable_event: bool` field on `LegalSource`, or an LLM-judge step, is the right replacement.
+### Illustrative scaffolds
 
-There are no tests for `examples/` and the directory is intentionally outside the `pytest testpaths` config.
+Not part of the public API. Both run offline (no Helius key needed).
+
+- **`examples/audit_demo.py`** — synthetic Helius-shaped transactions → `TransactionParser` / `transactions_to_dataframe` → FIFO cost-basis ledger → classifier → report. Slippage is measured as implied execution price vs. oracle reference (single-output swaps only). Prices come from a static `PRICE_USD` stub; assumes US federal / FIFO / USD.
+- **`examples/legal_grounding.py`** — wraps `audit_demo` with a RAG-style legal citation layer. `LegalSource` carries a `taxable_event: bool | None` field; conflict detection compares this field across jurisdictions (not substring matching on prose).
+
+Two design points in `legal_grounding.py` to preserve:
+
+1. **The `BLOCKING_VERIFICATION_GATE`** is intentional. Every `LegalSource.verbatim_excerpt` defaults to a `PLACEHOLDER` token; the report counts unverified citations. Do not weaken or default this away — it is the anti-hallucination guard.
+2. **`holding_summary` is metadata, not authority.** Only `verbatim_excerpt` is treated as a citation; only `taxable_event` is a structured legal signal.
+
+## Design docs
+
+Specs and implementation plans live under `docs/superpowers/`:
+
+- `docs/superpowers/specs/` — feature design specs (what + why; no code).
+- `docs/superpowers/plans/` — TDD-ordered implementation plans, each referencing a spec.
+
+Both are checked-in. Significant new work should land as a spec → plan → implementation, not as direct code.
