@@ -1,3 +1,5 @@
+from .addresses import validate_address
+from .client import SolanaDataFetcher
 from .dataframe import DATAFRAME_COLUMNS
 from .exceptions import (
     HeliusAPIError,
@@ -8,7 +10,6 @@ from .exceptions import (
     SolanaDataFetcherError,
 )
 from .parser import TransactionParser
-from .solana_data_fetcher import SolanaDataFetcher
 
 __all__ = [
     "DATAFRAME_COLUMNS",
@@ -20,4 +21,5 @@ __all__ = [
     "SolanaDataFetcher",
     "SolanaDataFetcherError",
     "TransactionParser",
+    "validate_address",
 ]

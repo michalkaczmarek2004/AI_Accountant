@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from decimal import Decimal
-from pathlib import Path
 import sys
 import unittest
+from decimal import Decimal
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -12,7 +12,7 @@ from ai_accountant import (
     InvalidSolanaAddressError,
     SolanaDataFetcher,
 )
-
+from ai_accountant.transport import _CaseInsensitiveHeaders
 
 WALLET_ADDRESS = "86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY"
 
@@ -29,7 +29,8 @@ class FakeResponse:
         self.status_code = status_code
         self._payload = payload
         self.text = text
-        self.headers = headers or {}
+        raw = headers or {}
+        self.headers = _CaseInsensitiveHeaders(raw.items())
 
     def json(self):
         if isinstance(self._payload, Exception):
@@ -293,6 +294,140 @@ class SolanaDataFetcherTests(unittest.TestCase):
             fetcher.fetch_transaction_history("not-a-valid-solana-address")
 
         self.assertEqual(session.calls, [])
+
+    def test_iter_transactions_yields_one_at_a_time(self):
+        session = FakeSession(
+            [
+                FakeResponse(
+                    200,
+                    payload=[
+                        {"signature": "sig-3"},
+                        {"signature": "sig-2"},
+                    ],
+                ),
+                FakeResponse(200, payload=[{"signature": "sig-1"}]),
+                FakeResponse(200, payload=[]),
+            ]
+        )
+        fetcher = SolanaDataFetcher(api_key="test-key", session=session)
+        seen: list[str] = []
+        for tx in fetcher.iter_transactions(WALLET_ADDRESS):
+            seen.append(tx["signature"])
+        self.assertEqual(seen, ["sig-3", "sig-2", "sig-1"])
+
+    def test_iter_transactions_invokes_cursor_callback_per_page(self):
+        session = FakeSession(
+            [
+                FakeResponse(200, payload=[{"signature": "sig-3"}, {"signature": "sig-2"}]),
+                FakeResponse(200, payload=[{"signature": "sig-1"}]),
+                FakeResponse(200, payload=[]),
+            ]
+        )
+        fetcher = SolanaDataFetcher(api_key="test-key", session=session)
+        cursors: list[str] = []
+        list(
+            fetcher.iter_transactions(
+                WALLET_ADDRESS,
+                on_cursor_advance=cursors.append,
+            )
+        )
+        # Callback fires after each page that produced a NEW cursor for the
+        # NEXT request. After page 1 cursor advances to "sig-2", after page 2
+        # cursor advances to "sig-1". Page 3 is empty — no further advance.
+        self.assertEqual(cursors, ["sig-2", "sig-1"])
+
+    def test_iter_transactions_callback_not_invoked_after_terminal_page(self):
+        session = FakeSession([FakeResponse(200, payload=[])])
+        fetcher = SolanaDataFetcher(api_key="test-key", session=session)
+        cursors: list[str] = []
+        list(
+            fetcher.iter_transactions(
+                WALLET_ADDRESS,
+                on_cursor_advance=cursors.append,
+            )
+        )
+        self.assertEqual(cursors, [])
+
+    def test_fetch_transaction_history_returns_concrete_list(self):
+        session = FakeSession(
+            [
+                FakeResponse(200, payload=[{"signature": "sig-1"}]),
+                FakeResponse(200, payload=[]),
+            ]
+        )
+        fetcher = SolanaDataFetcher(api_key="test-key", session=session)
+        result = fetcher.fetch_transaction_history(WALLET_ADDRESS)
+        self.assertIsInstance(result, list)
+        self.assertEqual(result, [{"signature": "sig-1"}])
+
+    def test_payload_validation_non_object_item_raises_helius_api_error(self):
+        from ai_accountant import HeliusAPIError
+
+        session = FakeSession(
+            [
+                FakeResponse(200, payload=[{"signature": "ok"}, "not-an-object"]),
+            ]
+        )
+        fetcher = SolanaDataFetcher(api_key="test-key", session=session)
+        with self.assertRaises(HeliusAPIError) as ctx:
+            fetcher.fetch_transaction_history(WALLET_ADDRESS)
+        self.assertIn("not a JSON object", str(ctx.exception))
+
+    def test_payload_validation_non_list_top_level_raises_helius_api_error(self):
+        from ai_accountant import HeliusAPIError
+
+        session = FakeSession(
+            [
+                FakeResponse(200, payload={"unexpected": "shape"}),
+            ]
+        )
+        fetcher = SolanaDataFetcher(api_key="test-key", session=session)
+        with self.assertRaises(HeliusAPIError):
+            fetcher.fetch_transaction_history(WALLET_ADDRESS)
+
+    def test_retry_after_lowercase_header_respected(self):
+        session = FakeSession(
+            [
+                FakeResponse(429, payload={"message": "slow down"}, headers={"retry-after": "0"}),
+                FakeResponse(200, payload=[]),
+            ]
+        )
+        sleep_calls: list[float] = []
+        fetcher = SolanaDataFetcher(
+            api_key="test-key",
+            session=session,
+            sleep_func=sleep_calls.append,
+        )
+        result = fetcher.fetch_transaction_history(WALLET_ADDRESS)
+        self.assertEqual(result, [])
+        self.assertEqual(sleep_calls, [0.0])
+
+    def test_retry_after_http_date_header_respected(self):
+        # The HTTP-date branch is tested directly in test_transport.py with a
+        # mocked `now`. Here we just verify the integration: a syntactically
+        # valid HTTP-date is accepted (parsed without raising) and a retry
+        # actually happens.
+        session = FakeSession(
+            [
+                FakeResponse(
+                    429,
+                    payload={"message": "slow"},
+                    headers={"Retry-After": "Mon, 04 May 2026 12:00:00 GMT"},
+                ),
+                FakeResponse(200, payload=[]),
+            ]
+        )
+        sleep_calls: list[float] = []
+        fetcher = SolanaDataFetcher(
+            api_key="test-key",
+            session=session,
+            sleep_func=sleep_calls.append,
+        )
+        result = fetcher.fetch_transaction_history(WALLET_ADDRESS)
+        self.assertEqual(result, [])
+        self.assertEqual(len(sleep_calls), 1)
+        # Delay clamped at 0 if date is in the past relative to wall clock.
+        self.assertGreaterEqual(sleep_calls[0], 0.0)
 
 
 if __name__ == "__main__":
