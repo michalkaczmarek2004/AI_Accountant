@@ -10,6 +10,7 @@ from .exceptions import (
     SolanaDataFetcherError,
 )
 from .parser import TransactionParser
+from .report import render_html_report, transaction_export_frame, write_wallet_report
 
 __all__ = [
     "DATAFRAME_COLUMNS",
@@ -21,5 +22,8 @@ __all__ = [
     "SolanaDataFetcher",
     "SolanaDataFetcherError",
     "TransactionParser",
+    "render_html_report",
+    "transaction_export_frame",
     "validate_address",
+    "write_wallet_report",
 ]

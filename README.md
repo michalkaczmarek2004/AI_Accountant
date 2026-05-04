@@ -27,6 +27,32 @@ for raw_tx in fetcher.iter_transactions(
     ...
 ```
 
+## Real wallet report
+
+Preview the readable HTML report without an API key, using the existing
+synthetic demo dataset:
+
+```powershell
+python examples\demo_html_report.py
+```
+
+Generate a readable HTML dashboard and a CSV export from real Helius data:
+
+```powershell
+$env:HELIUS_API_KEY="your-helius-key"
+python examples\real_wallet_report.py --wallet "<WALLET>" --max-pages 2
+```
+
+Outputs are written to `reports/`:
+
+- `ai_accountant_<wallet>_<timestamp>.html` - human-readable wallet report
+- `ai_accountant_<wallet>_<timestamp>_transactions.csv` - flat transaction export
+
+Use `--max-pages 0` to fetch all available Helius pages. The report uses real
+on-chain activity, but USD valuation, off-chain cost basis, exchange imports,
+and legal citations still need dedicated integrations before it is a final tax
+or accounting report.
+
 ## Layout
 
 - `src/ai_accountant/` — `client`, `parser`, `transport`, `addresses`, `dataframe`, `exceptions`
