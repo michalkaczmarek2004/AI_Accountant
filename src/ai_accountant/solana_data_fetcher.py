@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
 import time
 from typing import Any, Callable
 
@@ -10,6 +8,7 @@ import pandas as pd
 
 from .addresses import validate_address as _validate_address
 from .dataframe import DATAFRAME_COLUMNS as _DATAFRAME_COLUMNS
+from .dataframe import to_dataframe as _to_dataframe
 from .exceptions import (
     HeliusAPIError,
     HeliusAuthenticationError,
@@ -18,6 +17,7 @@ from .exceptions import (
     InvalidSolanaAddressError,
     SolanaDataFetcherError,
 )
+from .parser import TransactionParser as _TransactionParser
 from .transport import (
     TransportError,
     _SimpleResponse,
@@ -26,7 +26,6 @@ from .transport import (
 )
 
 
-LAMPORTS_PER_SOL = Decimal("1000000000")
 DEFAULT_BASE_URL = "https://api-mainnet.helius-rpc.com"
 
 
@@ -212,22 +211,9 @@ class SolanaDataFetcher:
         wallet_address: str,
         transactions: Iterable[Mapping[str, Any]],
     ) -> pd.DataFrame:
-        """
-        Convert raw Helius enhanced transactions into a structured DataFrame.
-
-        The DataFrame keeps financial values as `Decimal` objects to preserve
-        accounting precision when summing fees, native flows, and token flows.
-        """
-        normalized_address = self.validate_address(wallet_address)
-        rows = [
-            self._build_transaction_row(normalized_address, transaction)
-            for transaction in transactions
-        ]
-        if not rows:
-            return pd.DataFrame(columns=self.DATAFRAME_COLUMNS)
-
-        frame = pd.DataFrame(rows, columns=self.DATAFRAME_COLUMNS)
-        return frame.reset_index(drop=True)
+        """Convert raw Helius enhanced transactions into a structured DataFrame."""
+        parser = _TransactionParser(wallet_address)
+        return _to_dataframe(parser, transactions)
 
     @staticmethod
     def _validate_enum(name: str, value: str, allowed: set[str]) -> None:
@@ -350,282 +336,6 @@ class SolanaDataFetcher:
         wallet_address: str,
         transaction: Mapping[str, Any],
     ) -> dict[str, Any]:
-        parsed_movements = self._parse_wallet_movements(wallet_address, transaction)
-        fee_lamports = int(transaction.get("fee") or 0)
-        fee_sol = Decimal(fee_lamports) / LAMPORTS_PER_SOL
-        fee_payer = str(transaction.get("feePayer") or "")
-        fee_paid_by_wallet = fee_payer == wallet_address
+        """Deprecated: use `TransactionParser(wallet_address).parse(transaction)`."""
+        return _TransactionParser(wallet_address).parse(transaction)
 
-        native_in_sol = parsed_movements["native_in_sol"]
-        native_out_sol = parsed_movements["native_out_sol"]
-        native_transfer_net_sol = native_in_sol - native_out_sol
-        native_net_sol = native_transfer_net_sol - (
-            fee_sol if fee_paid_by_wallet else Decimal("0")
-        )
-
-        token_flow_details = self._flow_details_to_rows(parsed_movements["token_flows"])
-        token_in_summary = self._format_flow_summary(token_flow_details, key="in")
-        token_out_summary = self._format_flow_summary(token_flow_details, key="out")
-        token_net_summary = self._format_flow_summary(
-            token_flow_details,
-            key="net",
-            signed=True,
-        )
-
-        net_flow = self._build_net_flow(native_net_sol, token_flow_details)
-        timestamp_unix = transaction.get("timestamp")
-        transaction_error = transaction.get("transactionError")
-
-        return {
-            "signature": transaction.get("signature"),
-            "slot": transaction.get("slot"),
-            "timestamp_unix": timestamp_unix,
-            "timestamp": self._format_timestamp(timestamp_unix),
-            "transaction_type": transaction.get("type"),
-            "description": transaction.get("description"),
-            "source": transaction.get("source"),
-            "fee_lamports": fee_lamports,
-            "fee_sol": fee_sol,
-            "fee_paid_by_wallet": fee_paid_by_wallet,
-            "fee_payer": fee_payer or None,
-            "status": "failed" if transaction_error else "succeeded",
-            "native_in_sol": native_in_sol,
-            "native_out_sol": native_out_sol,
-            "native_transfer_net_sol": native_transfer_net_sol,
-            "native_net_sol": native_net_sol,
-            "token_in_summary": token_in_summary,
-            "token_out_summary": token_out_summary,
-            "token_net_summary": token_net_summary,
-            "net_flow_summary": self._format_net_flow_summary(net_flow),
-            "net_flow": net_flow,
-            "token_flow_details": token_flow_details,
-            "movements_in": parsed_movements["movements_in"],
-            "movements_out": parsed_movements["movements_out"],
-            "raw_native_transfers": list(transaction.get("nativeTransfers") or []),
-            "raw_token_transfers": list(transaction.get("tokenTransfers") or []),
-            "transaction_error": transaction_error,
-        }
-
-    def _parse_wallet_movements(
-        self,
-        wallet_address: str,
-        transaction: Mapping[str, Any],
-    ) -> dict[str, Any]:
-        native_in_sol = Decimal("0")
-        native_out_sol = Decimal("0")
-        token_flows: dict[tuple[str, str | None], dict[str, Any]] = {}
-        movements_in: list[dict[str, Any]] = []
-        movements_out: list[dict[str, Any]] = []
-
-        for native_transfer in transaction.get("nativeTransfers") or []:
-            from_account = str(native_transfer.get("fromUserAccount") or "")
-            to_account = str(native_transfer.get("toUserAccount") or "")
-            if from_account == wallet_address and to_account == wallet_address:
-                continue
-
-            amount_lamports = self._coerce_decimal(native_transfer.get("amount"))
-            if amount_lamports <= 0:
-                continue
-
-            amount_sol = amount_lamports / LAMPORTS_PER_SOL
-            base_record = {
-                "asset_type": "native",
-                "symbol": "SOL",
-                "mint": None,
-                "amount": amount_sol,
-                "amount_lamports": int(amount_lamports),
-                "from_user_account": from_account or None,
-                "to_user_account": to_account or None,
-            }
-
-            if to_account == wallet_address:
-                native_in_sol += amount_sol
-                movements_in.append(
-                    {
-                        **base_record,
-                        "direction": "in",
-                        "counterparty": from_account or None,
-                    }
-                )
-            if from_account == wallet_address:
-                native_out_sol += amount_sol
-                movements_out.append(
-                    {
-                        **base_record,
-                        "direction": "out",
-                        "counterparty": to_account or None,
-                    }
-                )
-
-        for token_transfer in transaction.get("tokenTransfers") or []:
-            from_account = str(token_transfer.get("fromUserAccount") or "")
-            to_account = str(token_transfer.get("toUserAccount") or "")
-            if from_account == wallet_address and to_account == wallet_address:
-                continue
-
-            amount = self._coerce_decimal(token_transfer.get("tokenAmount"))
-            if amount <= 0:
-                continue
-
-            mint = token_transfer.get("mint")
-            symbol = self._resolve_token_symbol(token_transfer)
-            flow_key = (symbol, mint)
-            flow_entry = token_flows.setdefault(
-                flow_key,
-                {
-                    "symbol": symbol,
-                    "mint": mint,
-                    "in": Decimal("0"),
-                    "out": Decimal("0"),
-                },
-            )
-
-            base_record = {
-                "asset_type": "token",
-                "symbol": symbol,
-                "mint": mint,
-                "amount": amount,
-                "from_user_account": from_account or None,
-                "to_user_account": to_account or None,
-                "from_token_account": token_transfer.get("fromTokenAccount"),
-                "to_token_account": token_transfer.get("toTokenAccount"),
-            }
-
-            if to_account == wallet_address:
-                flow_entry["in"] += amount
-                movements_in.append(
-                    {
-                        **base_record,
-                        "direction": "in",
-                        "counterparty": from_account or None,
-                    }
-                )
-            if from_account == wallet_address:
-                flow_entry["out"] += amount
-                movements_out.append(
-                    {
-                        **base_record,
-                        "direction": "out",
-                        "counterparty": to_account or None,
-                    }
-                )
-
-        return {
-            "native_in_sol": native_in_sol,
-            "native_out_sol": native_out_sol,
-            "token_flows": token_flows,
-            "movements_in": movements_in,
-            "movements_out": movements_out,
-        }
-
-    @staticmethod
-    def _coerce_decimal(value: Any) -> Decimal:
-        if value in (None, ""):
-            return Decimal("0")
-        if isinstance(value, Decimal):
-            return value
-        try:
-            return Decimal(str(value))
-        except (InvalidOperation, ValueError, TypeError) as exc:
-            raise HeliusAPIError(f"Unable to parse numeric value from {value!r}.") from exc
-
-    @staticmethod
-    def _resolve_token_symbol(token_transfer: Mapping[str, Any]) -> str:
-        candidates = (
-            token_transfer.get("tokenSymbol"),
-            token_transfer.get("symbol"),
-            token_transfer.get("currencySymbol"),
-            token_transfer.get("name"),
-            token_transfer.get("mint"),
-        )
-        for candidate in candidates:
-            if candidate:
-                return str(candidate)
-        return "UNKNOWN_TOKEN"
-
-    def _flow_details_to_rows(
-        self,
-        token_flows: Mapping[tuple[str, str | None], Mapping[str, Any]],
-    ) -> list[dict[str, Any]]:
-        rows: list[dict[str, Any]] = []
-        for _, flow in sorted(
-            token_flows.items(),
-            key=lambda item: (str(item[0][0]), str(item[0][1] or "")),
-        ):
-            inflow = Decimal(flow["in"])
-            outflow = Decimal(flow["out"])
-            rows.append(
-                {
-                    "symbol": flow["symbol"],
-                    "mint": flow["mint"],
-                    "label": self._asset_label(flow["symbol"], flow["mint"]),
-                    "in": inflow,
-                    "out": outflow,
-                    "net": inflow - outflow,
-                }
-            )
-        return rows
-
-    @staticmethod
-    def _asset_label(symbol: str, mint: str | None) -> str:
-        if mint and mint != symbol:
-            return f"{symbol} ({mint[:4]}...{mint[-4:]})"
-        return symbol
-
-    def _build_net_flow(
-        self,
-        native_net_sol: Decimal,
-        token_flow_details: Iterable[Mapping[str, Any]],
-    ) -> dict[str, Decimal]:
-        net_flow = {"SOL": native_net_sol}
-        for flow in token_flow_details:
-            net_flow[str(flow["label"])] = Decimal(flow["net"])
-        return net_flow
-
-    def _format_flow_summary(
-        self,
-        token_flow_details: Iterable[Mapping[str, Any]],
-        *,
-        key: str,
-        signed: bool = False,
-    ) -> str:
-        parts: list[str] = []
-        for flow in token_flow_details:
-            amount = Decimal(flow[key])
-            if amount == 0:
-                continue
-            rendered_amount = self._decimal_to_string(amount, signed=signed)
-            parts.append(f"{flow['label']}: {rendered_amount}")
-        return ", ".join(parts) if parts else "None"
-
-    def _format_net_flow_summary(self, net_flow: Mapping[str, Decimal]) -> str:
-        parts: list[str] = []
-        for asset_label, amount in net_flow.items():
-            if amount == 0:
-                continue
-            parts.append(f"{asset_label}: {self._decimal_to_string(amount, signed=True)}")
-        return ", ".join(parts) if parts else "No net movement"
-
-    @staticmethod
-    def _format_timestamp(timestamp_unix: Any) -> str | None:
-        if timestamp_unix in (None, ""):
-            return None
-        try:
-            return datetime.fromtimestamp(
-                int(timestamp_unix),
-                tz=timezone.utc,
-            ).strftime("%Y-%m-%d %H:%M:%S")
-        except (OSError, OverflowError, TypeError, ValueError):
-            return None
-
-    @staticmethod
-    def _decimal_to_string(value: Decimal, *, signed: bool = False) -> str:
-        normalized = value.normalize()
-        rendered = format(normalized, "f")
-        if "." in rendered:
-            rendered = rendered.rstrip("0").rstrip(".")
-        if rendered in {"", "-0"}:
-            rendered = "0"
-        if signed and not rendered.startswith("-") and rendered != "0":
-            rendered = f"+{rendered}"
-        return rendered

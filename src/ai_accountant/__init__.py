@@ -7,6 +7,7 @@ from .exceptions import (
     InvalidSolanaAddressError,
     SolanaDataFetcherError,
 )
+from .parser import TransactionParser
 from .solana_data_fetcher import SolanaDataFetcher
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "InvalidSolanaAddressError",
     "SolanaDataFetcher",
     "SolanaDataFetcherError",
+    "TransactionParser",
 ]
