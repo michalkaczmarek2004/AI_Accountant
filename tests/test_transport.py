@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
 import sys
 import unittest
+from datetime import datetime, timezone
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -45,10 +45,12 @@ class ParseRetryAfterTests(unittest.TestCase):
 
 class CaseInsensitiveHeadersTests(unittest.TestCase):
     def setUp(self):
-        self.headers = _CaseInsensitiveHeaders([
-            ("Retry-After", "10"),
-            ("Content-Type", "application/json"),
-        ])
+        self.headers = _CaseInsensitiveHeaders(
+            [
+                ("Retry-After", "10"),
+                ("Content-Type", "application/json"),
+            ]
+        )
 
     def test_lookup_lowercase(self):
         self.assertEqual(self.headers["retry-after"], "10")

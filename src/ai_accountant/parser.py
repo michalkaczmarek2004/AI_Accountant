@@ -7,6 +7,7 @@ Token flows are aggregated by full mint string. Display labels are rendered
 from `(symbol, mint)` and used only in the rendered summary fields; they are
 never used as dictionary keys.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
@@ -16,7 +17,6 @@ from typing import Any
 
 from .addresses import validate_address
 from .exceptions import HeliusAPIError
-
 
 LAMPORTS_PER_SOL = Decimal("1000000000")
 
@@ -40,20 +40,21 @@ class TransactionParser:
         native_in_sol = movements["native_in_sol"]
         native_out_sol = movements["native_out_sol"]
         native_transfer_net_sol = native_in_sol - native_out_sol
-        native_net_sol = native_transfer_net_sol - (
-            fee_sol if fee_paid_by_wallet else Decimal("0")
-        )
+        native_net_sol = native_transfer_net_sol - (fee_sol if fee_paid_by_wallet else Decimal("0"))
 
         token_flow_details = self._flow_details_to_rows(movements["token_flows"])
         token_in_summary = self._format_flow_summary(token_flow_details, key="in")
         token_out_summary = self._format_flow_summary(token_flow_details, key="out")
         token_net_summary = self._format_flow_summary(
-            token_flow_details, key="net", signed=True,
+            token_flow_details,
+            key="net",
+            signed=True,
         )
 
         net_flow = self._build_net_flow(native_net_sol, token_flow_details)
         net_flow_summary = self._format_net_flow_summary(
-            native_net_sol, token_flow_details,
+            native_net_sol,
+            token_flow_details,
         )
 
         timestamp_unix = transaction.get("timestamp")
@@ -91,14 +92,16 @@ class TransactionParser:
         }
 
     def parse_many(
-        self, transactions: Iterable[Mapping[str, Any]],
+        self,
+        transactions: Iterable[Mapping[str, Any]],
     ) -> list[dict[str, Any]]:
         return [self.parse(tx) for tx in transactions]
 
     # ------------------------------------------------------------------ helpers
 
     def _parse_wallet_movements(
-        self, transaction: Mapping[str, Any],
+        self,
+        transaction: Mapping[str, Any],
     ) -> dict[str, Any]:
         wallet = self.wallet_address
         native_in_sol = Decimal("0")
@@ -130,12 +133,14 @@ class TransactionParser:
 
             if to_account == wallet:
                 native_in_sol += amount_sol
-                movements_in.append({**base, "direction": "in",
-                                     "counterparty": from_account or None})
+                movements_in.append(
+                    {**base, "direction": "in", "counterparty": from_account or None}
+                )
             if from_account == wallet:
                 native_out_sol += amount_sol
-                movements_out.append({**base, "direction": "out",
-                                      "counterparty": to_account or None})
+                movements_out.append(
+                    {**base, "direction": "out", "counterparty": to_account or None}
+                )
 
         for token_transfer in transaction.get("tokenTransfers") or []:
             from_account = str(token_transfer.get("fromUserAccount") or "")
@@ -178,12 +183,14 @@ class TransactionParser:
 
             if to_account == wallet:
                 flow_entry["in"] += amount
-                movements_in.append({**base, "direction": "in",
-                                     "counterparty": from_account or None})
+                movements_in.append(
+                    {**base, "direction": "in", "counterparty": from_account or None}
+                )
             if from_account == wallet:
                 flow_entry["out"] += amount
-                movements_out.append({**base, "direction": "out",
-                                      "counterparty": to_account or None})
+                movements_out.append(
+                    {**base, "direction": "out", "counterparty": to_account or None}
+                )
 
         return {
             "native_in_sol": native_in_sol,
@@ -194,21 +201,24 @@ class TransactionParser:
         }
 
     def _flow_details_to_rows(
-        self, token_flows: Mapping[str, Mapping[str, Any]],
+        self,
+        token_flows: Mapping[str, Mapping[str, Any]],
     ) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         for mint in sorted(token_flows):
             flow = token_flows[mint]
             inflow = Decimal(flow["in"])
             outflow = Decimal(flow["out"])
-            rows.append({
-                "symbol": flow["symbol"],
-                "mint": mint,
-                "label": self._asset_label(flow["symbol"], mint),
-                "in": inflow,
-                "out": outflow,
-                "net": inflow - outflow,
-            })
+            rows.append(
+                {
+                    "symbol": flow["symbol"],
+                    "mint": mint,
+                    "label": self._asset_label(flow["symbol"], mint),
+                    "in": inflow,
+                    "out": outflow,
+                    "net": inflow - outflow,
+                }
+            )
         return rows
 
     def _build_net_flow(
@@ -244,16 +254,12 @@ class TransactionParser:
     ) -> str:
         parts: list[str] = []
         if native_net_sol != 0:
-            parts.append(
-                f"SOL: {self._decimal_to_string(native_net_sol, signed=True)}"
-            )
+            parts.append(f"SOL: {self._decimal_to_string(native_net_sol, signed=True)}")
         for flow in token_flow_details:
             net = Decimal(flow["net"])
             if net == 0:
                 continue
-            parts.append(
-                f"{flow['label']}: {self._decimal_to_string(net, signed=True)}"
-            )
+            parts.append(f"{flow['label']}: {self._decimal_to_string(net, signed=True)}")
         return ", ".join(parts) if parts else "No net movement"
 
     @staticmethod
@@ -271,9 +277,7 @@ class TransactionParser:
         try:
             return Decimal(str(value))
         except (InvalidOperation, ValueError, TypeError) as exc:
-            raise HeliusAPIError(
-                f"Unable to parse numeric value from {value!r}."
-            ) from exc
+            raise HeliusAPIError(f"Unable to parse numeric value from {value!r}.") from exc
 
     @staticmethod
     def _resolve_token_symbol(token_transfer: Mapping[str, Any]) -> str:
@@ -295,7 +299,8 @@ class TransactionParser:
             return None
         try:
             return datetime.fromtimestamp(
-                int(timestamp_unix), tz=timezone.utc,
+                int(timestamp_unix),
+                tz=timezone.utc,
             ).strftime("%Y-%m-%d %H:%M:%S")
         except (OSError, OverflowError, TypeError, ValueError):
             return None

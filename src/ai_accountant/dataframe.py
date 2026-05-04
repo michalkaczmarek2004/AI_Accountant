@@ -1,4 +1,5 @@
 """DataFrame schema and conversion helpers for ai_accountant."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
@@ -42,7 +43,7 @@ DATAFRAME_COLUMNS: list[str] = [
 
 
 def to_dataframe(
-    parser: "TransactionParser",
+    parser: TransactionParser,
     transactions: Iterable[Mapping[str, Any]],
 ) -> pd.DataFrame:
     """Parse `transactions` with `parser` and return a DataFrame with the canonical schema."""

@@ -4,13 +4,14 @@ Defines the structural `SessionProtocol` test doubles can implement, the
 `_UrllibSession` default, case-insensitive header normalization, and
 RFC-7231-compliant `Retry-After` parsing.
 """
+
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator, Mapping
+import json
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-import json
-from typing import Any, Callable, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen

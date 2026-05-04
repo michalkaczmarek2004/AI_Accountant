@@ -2,6 +2,7 @@
 
 Single source of truth. Both `solana_data_fetcher.py` and external callers import from here.
 """
+
 from __future__ import annotations
 
 

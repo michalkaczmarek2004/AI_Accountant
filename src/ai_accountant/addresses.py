@@ -1,4 +1,5 @@
 """Solana address validation. Stdlib-only Base58 decode."""
+
 from __future__ import annotations
 
 from .exceptions import InvalidSolanaAddressError
