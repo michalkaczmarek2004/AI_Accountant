@@ -16,6 +16,13 @@ DESIGN CONSTRAINT (hard-enforced in code):
     with output from your RAG retriever (FAISS / pgvector / etc.). The
     report renderer and tier logic are unchanged.
 
+STRUCTURED LEGAL SIGNAL:
+    `LegalSource.taxable_event` is the structured tri-state signal used by the
+    conflict detector. `holding_summary` is a paraphrase intended for human
+    display; it is NOT used as authority and is NOT scanned for keywords.
+    `verbatim_excerpt` (when populated by a real RAG retriever) is the only
+    text treated as authoritative.
+
 Confidence tiers used in this layer:
     CONFIRMED      -- enacted, in-force law or final administrative ruling
     DRAFT          -- bill text introduced; not yet enacted
@@ -65,6 +72,7 @@ class LegalSource:
     verbatim_excerpt: str    # MUST come from retriever; placeholder by default
     source_url: str
     applies_to: tuple[str, ...]   # categories from audit_demo.classify()
+    taxable_event: bool | None = None  # True/False = explicit; None = silent
 
 
 LEGAL_CORPUS: list[LegalSource] = [
@@ -82,6 +90,7 @@ LEGAL_CORPUS: list[LegalSource] = [
         source_url="https://www.irs.gov/pub/irs-drop/n-14-21.pdf",
         applies_to=("Swap (capital event)",
                     "External acquisition (basis seeded)"),
+        taxable_event=True,
     ),
     LegalSource(
         id="US-REV-RUL-2019-24",
@@ -97,6 +106,7 @@ LEGAL_CORPUS: list[LegalSource] = [
         verbatim_excerpt=PLACEHOLDER,
         source_url="https://www.irs.gov/pub/irs-drop/rr-19-24.pdf",
         applies_to=("Airdrop (ordinary income)",),
+        taxable_event=True,
     ),
     LegalSource(
         id="US-REV-RUL-2023-14",
@@ -112,6 +122,7 @@ LEGAL_CORPUS: list[LegalSource] = [
         verbatim_excerpt=PLACEHOLDER,
         source_url="https://www.irs.gov/pub/irs-drop/rr-23-14.pdf",
         applies_to=("Staking income (ordinary)",),
+        taxable_event=True,
     ),
     LegalSource(
         id="US-IRC-1091",
@@ -128,6 +139,7 @@ LEGAL_CORPUS: list[LegalSource] = [
         verbatim_excerpt=PLACEHOLDER,
         source_url="https://www.law.cornell.edu/uscode/text/26/1091",
         applies_to=("Swap (capital event)",),
+        taxable_event=True,
     ),
     LegalSource(
         id="US-PROPOSAL-1091-DIGITAL-EXT",
@@ -146,6 +158,7 @@ LEGAL_CORPUS: list[LegalSource] = [
         verbatim_excerpt=PLACEHOLDER,
         source_url="(supply current bill citation from RAG)",
         applies_to=("Swap (capital event)",),
+        taxable_event=True,
     ),
     LegalSource(
         id="US-FORM-1099-DA",
@@ -165,6 +178,7 @@ LEGAL_CORPUS: list[LegalSource] = [
         source_url="(supply final reg citation from RAG)",
         applies_to=("Swap (capital event)",
                     "External acquisition (basis seeded)"),
+        taxable_event=True,
     ),
     LegalSource(
         id="EU-MICA-2023-1114",
@@ -183,6 +197,7 @@ LEGAL_CORPUS: list[LegalSource] = [
         applies_to=("External acquisition (basis seeded)",
                     "Inbound deposit -- UNKNOWN BASIS",
                     "Internal transfer (non-taxable)"),
+        taxable_event=None,
     ),
     LegalSource(
         id="INTL-OECD-CARF-2022",
@@ -203,6 +218,7 @@ LEGAL_CORPUS: list[LegalSource] = [
         source_url="https://www.oecd.org/tax/exchange-of-tax-information/",
         applies_to=("External acquisition (basis seeded)",
                     "Inbound deposit -- UNKNOWN BASIS"),
+        taxable_event=None,
     ),
     LegalSource(
         id="PL-PIT-ART-30B-1A",
@@ -222,6 +238,7 @@ LEGAL_CORPUS: list[LegalSource] = [
         verbatim_excerpt=PLACEHOLDER,
         source_url="(supply current consolidated text citation)",
         applies_to=("Swap (capital event)",),
+        taxable_event=False,
     ),
     LegalSource(
         id="US-INTERP-INTERNAL-TRANSFER",
@@ -244,6 +261,7 @@ LEGAL_CORPUS: list[LegalSource] = [
                           "property; same-owner transfer is neither."),
         source_url="(no direct authority; interpretive)",
         applies_to=("Internal transfer (non-taxable)",),
+        taxable_event=False,
     ),
     LegalSource(
         id="US-INTERP-FAILED-TX-FEE",
@@ -264,6 +282,7 @@ LEGAL_CORPUS: list[LegalSource] = [
                           "digital-asset-specific authority on point."),
         source_url="(no direct authority; interpretive)",
         applies_to=("Failed transaction",),
+        taxable_event=None,
     ),
     LegalSource(
         id="US-INTERP-MISSING-BASIS",
@@ -282,6 +301,7 @@ LEGAL_CORPUS: list[LegalSource] = [
                           "principles; no digital-asset-specific ruling."),
         source_url="(no direct authority; interpretive)",
         applies_to=("Inbound deposit -- UNKNOWN BASIS",),
+        taxable_event=None,
     ),
 ]
 
@@ -427,16 +447,20 @@ def render_legal_report(financial_audit: pd.DataFrame,
         # Conflict surfacing
         for s_sec in secondary_sources:
             for s_pri in primary_sources:
-                if (s_pri.jurisdiction != s_sec.jurisdiction
-                        and "NOT" in s_sec.holding_summary
-                        and "NOT" not in s_pri.holding_summary):
+                if s_pri.jurisdiction == s_sec.jurisdiction:
+                    continue
+                if s_pri.taxable_event is None or s_sec.taxable_event is None:
+                    continue
+                if s_pri.taxable_event != s_sec.taxable_event:
+                    pri_label = "taxable" if s_pri.taxable_event else "non-taxable"
+                    sec_label = "taxable" if s_sec.taxable_event else "non-taxable"
                     lines += [
                         "",
-                        ("    [CONFLICT] Secondary jurisdiction "
-                         f"{s_sec.jurisdiction} appears to NEGATE the "
-                         f"taxable-event treatment in "
-                         f"{s_pri.jurisdiction}. Resolution depends on "
-                         f"taxpayer's tax residence and treaty position."),
+                        (
+                            f"    [CONFLICT] {s_pri.jurisdiction} treats this category as "
+                            f"{pri_label}; {s_sec.jurisdiction} treats it as {sec_label}. "
+                            f"Resolution depends on taxpayer's tax residence and treaty position."
+                        ),
                     ]
                     break
 
