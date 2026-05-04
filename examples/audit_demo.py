@@ -392,15 +392,41 @@ def run_pipeline(df: pd.DataFrame) -> tuple[pd.DataFrame, Ledger, list[dict]]:
                     continue
                 ledger.acquire(m["symbol"], Decimal(m["amount"]),
                                px, date, "swap")
-            if basis_usd > 0:
-                slip = (basis_usd - proceeds_usd) / basis_usd
-                if slip > Decimal("0.05"):
-                    findings.append({
-                        "sig": sig,
-                        "issue": "Possible high slippage / unfavorable fill",
-                        "estimated_loss_pct":
-                            f"{(slip * 100).quantize(TWO_PLACES)}%",
-                    })
+            # Slippage detection — compare implied execution price (in_value_usd / out_units)
+            # to the oracle reference price for the out-asset on the swap date.
+            # ILLUSTRATIVE — production needs a real quote provider (e.g. Jupiter quote
+            # API at swap-submit time). A daily oracle close still confuses true slippage
+            # with intra-day price drift, but it removes the basis-vs-proceeds confusion
+            # that the previous check had.
+            if (
+                len(row["movements_in"]) == 1
+                and len(row["movements_out"]) >= 1
+                and proceeds_usd > 0
+            ):
+                out_units = Decimal(row["movements_in"][0]["amount"])
+                out_symbol = row["movements_in"][0]["symbol"]
+                oracle_px = price_usd(out_symbol, date)
+                in_value_usd = Decimal("0")
+                for m in row["movements_out"]:
+                    in_px = price_usd(m["symbol"], date)
+                    if in_px is None:
+                        in_value_usd = Decimal("0")
+                        break
+                    in_value_usd += Decimal(m["amount"]) * in_px
+                if (
+                    oracle_px is not None
+                    and oracle_px > 0
+                    and out_units > 0
+                    and in_value_usd > 0
+                ):
+                    implied_px = in_value_usd / out_units
+                    slip_pct = (oracle_px - implied_px) / oracle_px
+                    if slip_pct > Decimal("0.05"):
+                        findings.append({
+                            "sig": sig,
+                            "issue": "Possible high slippage (implied execution price below oracle reference)",
+                            "implied_slippage_pct": f"{(slip_pct * 100).quantize(TWO_PLACES)}%",
+                        })
 
         elif category == "Inbound deposit -- UNKNOWN BASIS":
             for m in row["movements_in"]:
