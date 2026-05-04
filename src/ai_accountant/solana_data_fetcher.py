@@ -9,6 +9,7 @@ from typing import Any, Callable
 import pandas as pd
 
 from .addresses import validate_address as _validate_address
+from .dataframe import DATAFRAME_COLUMNS as _DATAFRAME_COLUMNS
 from .exceptions import (
     HeliusAPIError,
     HeliusAuthenticationError,
@@ -38,35 +39,7 @@ class SolanaDataFetcher:
     transaction-level Pandas DataFrame suitable for audit and tax workflows.
     """
 
-    DATAFRAME_COLUMNS = [
-        "signature",
-        "slot",
-        "timestamp_unix",
-        "timestamp",
-        "transaction_type",
-        "description",
-        "source",
-        "fee_lamports",
-        "fee_sol",
-        "fee_paid_by_wallet",
-        "fee_payer",
-        "status",
-        "native_in_sol",
-        "native_out_sol",
-        "native_transfer_net_sol",
-        "native_net_sol",
-        "token_in_summary",
-        "token_out_summary",
-        "token_net_summary",
-        "net_flow_summary",
-        "net_flow",
-        "token_flow_details",
-        "movements_in",
-        "movements_out",
-        "raw_native_transfers",
-        "raw_token_transfers",
-        "transaction_error",
-    ]
+    DATAFRAME_COLUMNS = _DATAFRAME_COLUMNS
 
     def __init__(
         self,
