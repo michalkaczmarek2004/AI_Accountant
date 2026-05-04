@@ -12,6 +12,7 @@ from urllib.request import Request, urlopen
 
 import pandas as pd
 
+from .addresses import validate_address as _validate_address
 from .exceptions import (
     HeliusAPIError,
     HeliusAuthenticationError,
@@ -24,8 +25,6 @@ from .exceptions import (
 
 LAMPORTS_PER_SOL = Decimal("1000000000")
 DEFAULT_BASE_URL = "https://api-mainnet.helius-rpc.com"
-BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-BASE58_INDEX = {character: index for index, character in enumerate(BASE58_ALPHABET)}
 
 
 class TransportError(Exception):
@@ -166,20 +165,7 @@ class SolanaDataFetcher:
     @staticmethod
     def validate_address(address: str) -> str:
         """Validate a Solana public key and return the stripped value."""
-        if not isinstance(address, str):
-            raise InvalidSolanaAddressError("Wallet address must be a string.")
-
-        normalized_address = address.strip()
-        if not normalized_address:
-            raise InvalidSolanaAddressError("Wallet address cannot be empty.")
-
-        decoded = SolanaDataFetcher._decode_base58(normalized_address)
-        if len(decoded) != 32:
-            raise InvalidSolanaAddressError(
-                "Wallet address must decode to a 32-byte Solana public key."
-            )
-
-        return normalized_address
+        return _validate_address(address)
 
     def fetch_transaction_history(
         self,
@@ -323,23 +309,6 @@ class SolanaDataFetcher:
 
         frame = pd.DataFrame(rows, columns=self.DATAFRAME_COLUMNS)
         return frame.reset_index(drop=True)
-
-    @staticmethod
-    def _decode_base58(value: str) -> bytes:
-        number = 0
-        for character in value:
-            if character not in BASE58_INDEX:
-                raise InvalidSolanaAddressError(
-                    f"Wallet address contains invalid Base58 character: {character!r}."
-                )
-            number = (number * 58) + BASE58_INDEX[character]
-
-        decoded = b""
-        if number:
-            decoded = number.to_bytes((number.bit_length() + 7) // 8, "big")
-
-        leading_zeroes = len(value) - len(value.lstrip("1"))
-        return (b"\x00" * leading_zeroes) + decoded
 
     @staticmethod
     def _validate_enum(name: str, value: str, allowed: set[str]) -> None:
