@@ -32,14 +32,14 @@ Confidence tiers used in this layer:
 
 NOT TAX OR LEGAL ADVICE.
 """
+
 from __future__ import annotations
 
 import sys
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 
@@ -47,12 +47,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from audit_demo import (  # noqa: E402
-    WALLET, build_dataframe, run_pipeline, consistency_checks,
+    WALLET,
+    build_dataframe,
+    consistency_checks,
+    run_pipeline,
 )
 
-
-PLACEHOLDER = ("[PLACEHOLDER -- supply retrieved RAG chunk verbatim before "
-               "issuing report]")
+PLACEHOLDER = "[PLACEHOLDER -- supply retrieved RAG chunk verbatim before issuing report]"
 
 
 # ---------------------------------------------------------------------------
@@ -61,17 +62,17 @@ PLACEHOLDER = ("[PLACEHOLDER -- supply retrieved RAG chunk verbatim before "
 @dataclass(frozen=True)
 class LegalSource:
     id: str
-    jurisdiction: str        # "US-FED", "EU", "PL", "INTL"
-    kind: str                # "STATUTE" | "IRS_NOTICE" | "REV_RUL" | "REG"
-                             # | "DRAFT" | "INTERPRETATION"
-    tier: str                # "CONFIRMED" | "DRAFT" | "PROPOSED"
-                             # | "INTERPRETATION"
+    jurisdiction: str  # "US-FED", "EU", "PL", "INTL"
+    kind: str  # "STATUTE" | "IRS_NOTICE" | "REV_RUL" | "REG"
+    # | "DRAFT" | "INTERPRETATION"
+    tier: str  # "CONFIRMED" | "DRAFT" | "PROPOSED"
+    # | "INTERPRETATION"
     effective_date: str | None
     title: str
-    holding_summary: str     # neutral one-line summary, NOT a citation
-    verbatim_excerpt: str    # MUST come from retriever; placeholder by default
+    holding_summary: str  # neutral one-line summary, NOT a citation
+    verbatim_excerpt: str  # MUST come from retriever; placeholder by default
     source_url: str
-    applies_to: tuple[str, ...]   # categories from audit_demo.classify()
+    applies_to: tuple[str, ...]  # categories from audit_demo.classify()
     taxable_event: bool | None = None  # True/False = explicit; None = silent
 
 
@@ -83,13 +84,14 @@ LEGAL_CORPUS: list[LegalSource] = [
         tier="CONFIRMED",
         effective_date="2014-04-14",
         title="IRS Notice 2014-21  -- Virtual currency treated as property",
-        holding_summary=("Convertible virtual currency is treated as "
-                         "property for US federal tax purposes; general "
-                         "property tax principles apply."),
+        holding_summary=(
+            "Convertible virtual currency is treated as "
+            "property for US federal tax purposes; general "
+            "property tax principles apply."
+        ),
         verbatim_excerpt=PLACEHOLDER,
         source_url="https://www.irs.gov/pub/irs-drop/n-14-21.pdf",
-        applies_to=("Swap (capital event)",
-                    "External acquisition (basis seeded)"),
+        applies_to=("Swap (capital event)", "External acquisition (basis seeded)"),
         taxable_event=True,
     ),
     LegalSource(
@@ -99,10 +101,12 @@ LEGAL_CORPUS: list[LegalSource] = [
         tier="CONFIRMED",
         effective_date="2019-10-09",
         title="Rev. Rul. 2019-24  -- Hard forks and airdrops",
-        holding_summary=("Taxpayer recognizes ordinary income equal to FMV "
-                         "of cryptocurrency received in an airdrop following "
-                         "a hard fork, in the year dominion and control is "
-                         "established."),
+        holding_summary=(
+            "Taxpayer recognizes ordinary income equal to FMV "
+            "of cryptocurrency received in an airdrop following "
+            "a hard fork, in the year dominion and control is "
+            "established."
+        ),
         verbatim_excerpt=PLACEHOLDER,
         source_url="https://www.irs.gov/pub/irs-drop/rr-19-24.pdf",
         applies_to=("Airdrop (ordinary income)",),
@@ -115,10 +119,12 @@ LEGAL_CORPUS: list[LegalSource] = [
         tier="CONFIRMED",
         effective_date="2023-08-01",
         title="Rev. Rul. 2023-14  -- Staking rewards",
-        holding_summary=("Cash-method taxpayer must include FMV of "
-                         "validation rewards in gross income in the taxable "
-                         "year in which the taxpayer obtains dominion and "
-                         "control."),
+        holding_summary=(
+            "Cash-method taxpayer must include FMV of "
+            "validation rewards in gross income in the taxable "
+            "year in which the taxpayer obtains dominion and "
+            "control."
+        ),
         verbatim_excerpt=PLACEHOLDER,
         source_url="https://www.irs.gov/pub/irs-drop/rr-23-14.pdf",
         applies_to=("Staking income (ordinary)",),
@@ -131,11 +137,13 @@ LEGAL_CORPUS: list[LegalSource] = [
         tier="CONFIRMED",
         effective_date="1954-08-16",
         title="26 U.S.C. sec.1091  -- Wash sales of stock or securities",
-        holding_summary=("Wash-sale disallowance applies to 'stock or "
-                         "securities'. Digital assets are NOT currently "
-                         "within scope under existing Treasury/IRS "
-                         "interpretation; tax-loss harvesting on crypto "
-                         "remains permissible under current law."),
+        holding_summary=(
+            "Wash-sale disallowance applies to 'stock or "
+            "securities'. Digital assets are NOT currently "
+            "within scope under existing Treasury/IRS "
+            "interpretation; tax-loss harvesting on crypto "
+            "remains permissible under current law."
+        ),
         verbatim_excerpt=PLACEHOLDER,
         source_url="https://www.law.cornell.edu/uscode/text/26/1091",
         applies_to=("Swap (capital event)",),
@@ -147,14 +155,18 @@ LEGAL_CORPUS: list[LegalSource] = [
         kind="DRAFT",
         tier="DRAFT",
         effective_date=None,
-        title=("Proposed legislative extension of IRC sec.1091 wash-sale "
-               "rule to digital assets (multiple bills across recent "
-               "Congresses)"),
-        holding_summary=("Recurring proposals would bring digital assets "
-                         "within sec.1091. NOT enacted as of corpus "
-                         "snapshot. Strategic implication: tax-loss "
-                         "harvesting remains permissible TODAY but the "
-                         "30-day repurchase window may become disallowed."),
+        title=(
+            "Proposed legislative extension of IRC sec.1091 wash-sale "
+            "rule to digital assets (multiple bills across recent "
+            "Congresses)"
+        ),
+        holding_summary=(
+            "Recurring proposals would bring digital assets "
+            "within sec.1091. NOT enacted as of corpus "
+            "snapshot. Strategic implication: tax-loss "
+            "harvesting remains permissible TODAY but the "
+            "30-day repurchase window may become disallowed."
+        ),
         verbatim_excerpt=PLACEHOLDER,
         source_url="(supply current bill citation from RAG)",
         applies_to=("Swap (capital event)",),
@@ -166,18 +178,21 @@ LEGAL_CORPUS: list[LegalSource] = [
         kind="REG",
         tier="CONFIRMED",
         effective_date="2025-01-01",
-        title=("Treas. Reg. on Form 1099-DA broker reporting  -- centralized "
-               "digital-asset brokers (DeFi broker rule rescinded by "
-               "Congressional Review Act in 2025)"),
-        holding_summary=("Centralized digital-asset brokers must report "
-                         "gross proceeds from 2025 transactions on Form "
-                         "1099-DA. The DeFi broker rule was rescinded; "
-                         "self-custodial on-chain DEX activity is NOT "
-                         "subject to broker reporting today."),
+        title=(
+            "Treas. Reg. on Form 1099-DA broker reporting  -- centralized "
+            "digital-asset brokers (DeFi broker rule rescinded by "
+            "Congressional Review Act in 2025)"
+        ),
+        holding_summary=(
+            "Centralized digital-asset brokers must report "
+            "gross proceeds from 2025 transactions on Form "
+            "1099-DA. The DeFi broker rule was rescinded; "
+            "self-custodial on-chain DEX activity is NOT "
+            "subject to broker reporting today."
+        ),
         verbatim_excerpt=PLACEHOLDER,
         source_url="(supply final reg citation from RAG)",
-        applies_to=("Swap (capital event)",
-                    "External acquisition (basis seeded)"),
+        applies_to=("Swap (capital event)", "External acquisition (basis seeded)"),
         taxable_event=True,
     ),
     LegalSource(
@@ -187,16 +202,20 @@ LEGAL_CORPUS: list[LegalSource] = [
         tier="CONFIRMED",
         effective_date="2024-12-30",
         title="Regulation (EU) 2023/1114 (MiCA)  -- Markets in Crypto-Assets",
-        holding_summary=("MiCA establishes prudential and disclosure rules "
-                         "for crypto-asset issuers and CASPs across the EU. "
-                         "It does NOT itself impose income-tax "
-                         "characterization, which remains a Member-State "
-                         "competence."),
+        holding_summary=(
+            "MiCA establishes prudential and disclosure rules "
+            "for crypto-asset issuers and CASPs across the EU. "
+            "It does NOT itself impose income-tax "
+            "characterization, which remains a Member-State "
+            "competence."
+        ),
         verbatim_excerpt=PLACEHOLDER,
         source_url="https://eur-lex.europa.eu/eli/reg/2023/1114/oj",
-        applies_to=("External acquisition (basis seeded)",
-                    "Inbound deposit -- UNKNOWN BASIS",
-                    "Internal transfer (non-taxable)"),
+        applies_to=(
+            "External acquisition (basis seeded)",
+            "Inbound deposit -- UNKNOWN BASIS",
+            "Internal transfer (non-taxable)",
+        ),
         taxable_event=None,
     ),
     LegalSource(
@@ -205,19 +224,22 @@ LEGAL_CORPUS: list[LegalSource] = [
         kind="REG",
         tier="CONFIRMED",
         effective_date="2026-01-01",
-        title=("OECD Crypto-Asset Reporting Framework (CARF), 2022, plus "
-               "DAC8 transposition in EU Member States"),
-        holding_summary=("CARF imposes automatic exchange of crypto-asset "
-                         "user information by reporting CASPs (first "
-                         "exchanges in many adopters from 2027 covering "
-                         "2026 data). Self-custodial wallet activity is "
-                         "NOT itself reportable, but interactions with "
-                         "reporting CASPs WILL be visible to the user's "
-                         "tax authority."),
+        title=(
+            "OECD Crypto-Asset Reporting Framework (CARF), 2022, plus "
+            "DAC8 transposition in EU Member States"
+        ),
+        holding_summary=(
+            "CARF imposes automatic exchange of crypto-asset "
+            "user information by reporting CASPs (first "
+            "exchanges in many adopters from 2027 covering "
+            "2026 data). Self-custodial wallet activity is "
+            "NOT itself reportable, but interactions with "
+            "reporting CASPs WILL be visible to the user's "
+            "tax authority."
+        ),
         verbatim_excerpt=PLACEHOLDER,
         source_url="https://www.oecd.org/tax/exchange-of-tax-information/",
-        applies_to=("External acquisition (basis seeded)",
-                    "Inbound deposit -- UNKNOWN BASIS"),
+        applies_to=("External acquisition (basis seeded)", "Inbound deposit -- UNKNOWN BASIS"),
         taxable_event=None,
     ),
     LegalSource(
@@ -226,15 +248,19 @@ LEGAL_CORPUS: list[LegalSource] = [
         kind="STATUTE",
         tier="CONFIRMED",
         effective_date="2019-01-01",
-        title=("Ustawa o PIT, Art. 30b ust. 1a  -- 19% PIT on gains from "
-               "disposal of cryptoassets for fiat or goods/services"),
-        holding_summary=("Polish PIT residents recognize 19% income tax on "
-                         "the difference between proceeds from disposal of "
-                         "cryptoassets (for fiat / goods / services / "
-                         "settlement of liabilities) and documented "
-                         "acquisition costs. Crypto-to-crypto swaps are "
-                         "NOT a taxable event under the current statutory "
-                         "text."),
+        title=(
+            "Ustawa o PIT, Art. 30b ust. 1a  -- 19% PIT on gains from "
+            "disposal of cryptoassets for fiat or goods/services"
+        ),
+        holding_summary=(
+            "Polish PIT residents recognize 19% income tax on "
+            "the difference between proceeds from disposal of "
+            "cryptoassets (for fiat / goods / services / "
+            "settlement of liabilities) and documented "
+            "acquisition costs. Crypto-to-crypto swaps are "
+            "NOT a taxable event under the current statutory "
+            "text."
+        ),
         verbatim_excerpt=PLACEHOLDER,
         source_url="(supply current consolidated text citation)",
         applies_to=("Swap (capital event)",),
@@ -246,19 +272,22 @@ LEGAL_CORPUS: list[LegalSource] = [
         kind="INTERPRETATION",
         tier="INTERPRETATION",
         effective_date=None,
-        title=("Interpretive: same-beneficial-owner wallet transfer is not "
-               "a realization event"),
-        holding_summary=("Movement of digital assets between two wallets "
-                         "controlled by the same taxpayer is not a sale or "
-                         "exchange and does not give rise to gain or loss. "
-                         "Anchored in IRC sec.1001 realization principles; "
-                         "no digital-asset-specific ruling on point. "
-                         "Document beneficial ownership and basis "
-                         "carryover."),
-        verbatim_excerpt=("INTERPRETATION  -- no quoted statute. Anchor "
-                          "principle: IRC sec.1001(a) defines gain/loss as "
-                          "arising from sale or other disposition of "
-                          "property; same-owner transfer is neither."),
+        title=("Interpretive: same-beneficial-owner wallet transfer is not a realization event"),
+        holding_summary=(
+            "Movement of digital assets between two wallets "
+            "controlled by the same taxpayer is not a sale or "
+            "exchange and does not give rise to gain or loss. "
+            "Anchored in IRC sec.1001 realization principles; "
+            "no digital-asset-specific ruling on point. "
+            "Document beneficial ownership and basis "
+            "carryover."
+        ),
+        verbatim_excerpt=(
+            "INTERPRETATION  -- no quoted statute. Anchor "
+            "principle: IRC sec.1001(a) defines gain/loss as "
+            "arising from sale or other disposition of "
+            "property; same-owner transfer is neither."
+        ),
         source_url="(no direct authority; interpretive)",
         applies_to=("Internal transfer (non-taxable)",),
         taxable_event=False,
@@ -269,17 +298,19 @@ LEGAL_CORPUS: list[LegalSource] = [
         kind="INTERPRETATION",
         tier="INTERPRETATION",
         effective_date=None,
-        title=("Interpretive: deductibility of network fees on failed "
-               "transactions"),
-        holding_summary=("No published guidance specifically addresses "
-                         "network fees on failed on-chain transactions. "
-                         "Possible treatments: (i) added to basis of "
-                         "intended acquisition (n/a if no acquisition), "
-                         "(ii) ordinary loss under IRC sec.165, or "
-                         "(iii) personal non-deductible expense. Position "
-                         "should be disclosed if material."),
-        verbatim_excerpt=("INTERPRETATION  -- no quoted statute. No "
-                          "digital-asset-specific authority on point."),
+        title=("Interpretive: deductibility of network fees on failed transactions"),
+        holding_summary=(
+            "No published guidance specifically addresses "
+            "network fees on failed on-chain transactions. "
+            "Possible treatments: (i) added to basis of "
+            "intended acquisition (n/a if no acquisition), "
+            "(ii) ordinary loss under IRC sec.165, or "
+            "(iii) personal non-deductible expense. Position "
+            "should be disclosed if material."
+        ),
+        verbatim_excerpt=(
+            "INTERPRETATION  -- no quoted statute. No digital-asset-specific authority on point."
+        ),
         source_url="(no direct authority; interpretive)",
         applies_to=("Failed transaction",),
         taxable_event=None,
@@ -290,15 +321,18 @@ LEGAL_CORPUS: list[LegalSource] = [
         kind="INTERPRETATION",
         tier="INTERPRETATION",
         effective_date=None,
-        title=("Interpretive: zero-basis fallback when acquisition data "
-               "cannot be substantiated"),
-        holding_summary=("Where the taxpayer cannot substantiate basis, "
-                         "the IRS position has historically been to treat "
-                         "basis as zero on disposal (Cohan rule may permit "
-                         "estimation in some circumstances). Resolve "
-                         "before filing to avoid inflated gain."),
-        verbatim_excerpt=("INTERPRETATION  -- general substantiation "
-                          "principles; no digital-asset-specific ruling."),
+        title=("Interpretive: zero-basis fallback when acquisition data cannot be substantiated"),
+        holding_summary=(
+            "Where the taxpayer cannot substantiate basis, "
+            "the IRS position has historically been to treat "
+            "basis as zero on disposal (Cohan rule may permit "
+            "estimation in some circumstances). Resolve "
+            "before filing to avoid inflated gain."
+        ),
+        verbatim_excerpt=(
+            "INTERPRETATION  -- general substantiation "
+            "principles; no digital-asset-specific ruling."
+        ),
         source_url="(no direct authority; interpretive)",
         applies_to=("Inbound deposit -- UNKNOWN BASIS",),
         taxable_event=None,
@@ -312,8 +346,7 @@ LEGAL_CORPUS: list[LegalSource] = [
 def retrieve(category: str, jurisdictions: tuple[str, ...]) -> list[LegalSource]:
     """Category + jurisdiction filter. In prod this becomes a vector lookup
     keyed on (category description, jurisdiction) returning top-k chunks."""
-    return [s for s in LEGAL_CORPUS
-            if category in s.applies_to and s.jurisdiction in jurisdictions]
+    return [s for s in LEGAL_CORPUS if category in s.applies_to and s.jurisdiction in jurisdictions]
 
 
 # ---------------------------------------------------------------------------
@@ -343,21 +376,24 @@ def _fmt_source(s: LegalSource, role: str) -> list[str]:
     ]
 
 
-def render_legal_report(financial_audit: pd.DataFrame,
-                        findings: list[dict],
-                        checks: list[str]) -> str:
+def render_legal_report(
+    financial_audit: pd.DataFrame, findings: list[dict], checks: list[str]
+) -> str:
     sep = "=" * 78
     sub = "-" * 78
 
     lines: list[str] = []
-    lines += [sep,
-              "LEGAL FOUNDATIONS & AUDIT REPORT  --  ILLUSTRATIVE",
-              f"Wallet:                {WALLET}",
-              "Period:                2024-12-15 -> 2025-05-03 (synthetic)",
-              f"Primary jurisdiction:  {PRIMARY_JURISDICTION}",
-              f"Secondary corpora:     {', '.join(SECONDARY_JURISDICTIONS)}",
-              "Cost-basis method:     FIFO, single-wallet view",
-              sep, ""]
+    lines += [
+        sep,
+        "LEGAL FOUNDATIONS & AUDIT REPORT  --  ILLUSTRATIVE",
+        f"Wallet:                {WALLET}",
+        "Period:                2024-12-15 -> 2025-05-03 (synthetic)",
+        f"Primary jurisdiction:  {PRIMARY_JURISDICTION}",
+        f"Secondary corpora:     {', '.join(SECONDARY_JURISDICTIONS)}",
+        "Cost-basis method:     FIFO, single-wallet view",
+        sep,
+        "",
+    ]
 
     by_cat: dict[str, list[pd.Series]] = defaultdict(list)
     for _, row in financial_audit.iterrows():
@@ -367,24 +403,25 @@ def render_legal_report(financial_audit: pd.DataFrame,
     total_gain = financial_audit["gain_usd"].sum()
     total_fee = financial_audit["fee_usd"].sum()
 
-    grey_cats = [c for c in by_cat
-                 if not any(s.tier == "CONFIRMED"
-                            for s in retrieve(c, (PRIMARY_JURISDICTION,)))]
+    grey_cats = [
+        c
+        for c in by_cat
+        if not any(s.tier == "CONFIRMED" for s in retrieve(c, (PRIMARY_JURISDICTION,)))
+    ]
 
     all_cited: list[LegalSource] = []
     for c in by_cat:
-        all_cited.extend(retrieve(
-            c, (PRIMARY_JURISDICTION,) + SECONDARY_JURISDICTIONS))
+        all_cited.extend(retrieve(c, (PRIMARY_JURISDICTION,) + SECONDARY_JURISDICTIONS))
     unverified = count_unverified(all_cited)
 
     # ----- Executive legal summary -----
-    lines += ["EXECUTIVE LEGAL SUMMARY", sub,
-              f"  Categories observed:                  {len(by_cat)}",
-              f"  Categories with CONFIRMED authority:  "
-              f"{len(by_cat) - len(grey_cats)} / {len(by_cat)}",
-              f"  Grey-area categories (no CONFIRMED authority "
-              "in primary jurisdiction):",
-              ]
+    lines += [
+        "EXECUTIVE LEGAL SUMMARY",
+        sub,
+        f"  Categories observed:                  {len(by_cat)}",
+        f"  Categories with CONFIRMED authority:  {len(by_cat) - len(grey_cats)} / {len(by_cat)}",
+        "  Grey-area categories (no CONFIRMED authority in primary jurisdiction):",
+    ]
     if grey_cats:
         for c in grey_cats:
             lines.append(f"      - {c}")
@@ -395,14 +432,12 @@ def render_legal_report(financial_audit: pd.DataFrame,
         f"  Net realized capital gain / (loss):   $ {total_gain:>12}",
         f"  Network fees paid by wallet:          $ {total_fee:>12}",
         f"  Internal-consistency checks:          "
-        f"{'PASS' if not checks else 'FAIL ('+str(len(checks))+')'}",
+        f"{'PASS' if not checks else 'FAIL (' + str(len(checks)) + ')'}",
         "",
         "  BLOCKING_VERIFICATION_GATE:",
         f"      Unverified citations (placeholder excerpts): {unverified}",
-        ("      ==> Report is NOT issuable as authoritative until the "
-         "RAG"),
-        ("          retriever populates verbatim_excerpt for every cited "
-         "source."),
+        ("      ==> Report is NOT issuable as authoritative until the RAG"),
+        ("          retriever populates verbatim_excerpt for every cited source."),
         "",
     ]
 
@@ -411,22 +446,21 @@ def render_legal_report(financial_audit: pd.DataFrame,
     for cat in sorted(by_cat):
         rows = by_cat[cat]
         sigs = ", ".join(r["signature"] for r in rows)
-        cat_income = sum((Decimal(str(r["income_usd"])) for r in rows),
-                         Decimal("0"))
-        cat_gain = sum((Decimal(str(r["gain_usd"])) for r in rows),
-                       Decimal("0"))
+        cat_income = sum((Decimal(str(r["income_usd"])) for r in rows), Decimal("0"))
+        cat_gain = sum((Decimal(str(r["gain_usd"])) for r in rows), Decimal("0"))
         primary_sources = retrieve(cat, (PRIMARY_JURISDICTION,))
         secondary_sources = retrieve(cat, SECONDARY_JURISDICTIONS)
 
-        lines += ["",
-                  f"  CATEGORY: {cat}",
-                  f"  Affected signatures: {sigs}",
-                  f"  Income recognized:   $ {cat_income}",
-                  f"  Gain recognized:     $ {cat_gain}",
-                  ""]
+        lines += [
+            "",
+            f"  CATEGORY: {cat}",
+            f"  Affected signatures: {sigs}",
+            f"  Income recognized:   $ {cat_income}",
+            f"  Gain recognized:     $ {cat_gain}",
+            "",
+        ]
         if not primary_sources and not secondary_sources:
-            lines.append("    [GREY AREA] No corpus snippet matched. "
-                         "Manual review required.")
+            lines.append("    [GREY AREA] No corpus snippet matched. Manual review required.")
             continue
 
         if primary_sources:
@@ -434,13 +468,14 @@ def render_legal_report(financial_audit: pd.DataFrame,
             for s in primary_sources:
                 lines += _fmt_source(s, role="PRIMARY")
         else:
-            lines.append("    [GREY AREA] No primary-jurisdiction "
-                         "authority returned. Classification rests on "
-                         "interpretation only.")
+            lines.append(
+                "    [GREY AREA] No primary-jurisdiction "
+                "authority returned. Classification rests on "
+                "interpretation only."
+            )
 
         if secondary_sources:
-            lines += ["", "    Secondary-jurisdiction context "
-                          "(informational):"]
+            lines += ["", "    Secondary-jurisdiction context (informational):"]
             for s in secondary_sources:
                 lines += _fmt_source(s, role="SECONDARY")
 
@@ -473,9 +508,11 @@ def render_legal_report(financial_audit: pd.DataFrame,
 
     # ----- Strategic recommendations driven by DRAFT corpus entries -----
     drafts = [s for s in LEGAL_CORPUS if s.tier in {"DRAFT", "PROPOSED"}]
-    upcoming = [s for s in LEGAL_CORPUS
-                if s.tier == "CONFIRMED"
-                and s.effective_date and s.effective_date > "2025-12-31"]
+    upcoming = [
+        s
+        for s in LEGAL_CORPUS
+        if s.tier == "CONFIRMED" and s.effective_date and s.effective_date > "2025-12-31"
+    ]
 
     lines += ["", "STRATEGIC RECOMMENDATIONS", sub]
     lines.append("  [Driven by DRAFT / PROPOSED entries in corpus]")
@@ -486,9 +523,9 @@ def render_legal_report(financial_audit: pd.DataFrame,
         lines += [
             f"    - {s.id} ({s.tier}){flag}",
             f"        {s.holding_summary}",
-            f"        Action: re-run this report when the bill text is "
-            f"finalized; the harvest-and-repurchase posture currently "
-            f"permitted by US-IRC-1091 may be disallowed.",
+            "        Action: re-run this report when the bill text is "
+            "finalized; the harvest-and-repurchase posture currently "
+            "permitted by US-IRC-1091 may be disallowed.",
         ]
 
     lines.append("")
@@ -500,29 +537,33 @@ def render_legal_report(financial_audit: pd.DataFrame,
         lines += [
             f"    - {s.id} (CONFIRMED, effective {s.effective_date}){flag}",
             f"        {s.holding_summary}",
-            f"        Action: confirm whether any CASP counterparty in "
-            f"this audit becomes an in-scope reporter under the cited "
-            f"regulation; reconcile to user's CRS/CARF disclosures.",
+            "        Action: confirm whether any CASP counterparty in "
+            "this audit becomes an in-scope reporter under the cited "
+            "regulation; reconcile to user's CRS/CARF disclosures.",
         ]
 
-    lines += ["",
-              "  [Operational, derived from this report]",
-              "    - Resolve all 'Inbound deposit -- UNKNOWN BASIS' rows "
-              "before filing; the zero-basis fallback (US-INTERP-MISSING-"
-              "BASIS) inflates future gain on disposal.",
-              "    - Document beneficial ownership of OWN_WALLET_2 to "
-              "preserve the non-realization position under "
-              "US-INTERP-INTERNAL-TRANSFER.",
-              "    - Disclose the failed-transaction fee position "
-              "(US-INTERP-FAILED-TX-FEE) on the return if material.",
-              ""]
+    lines += [
+        "",
+        "  [Operational, derived from this report]",
+        "    - Resolve all 'Inbound deposit -- UNKNOWN BASIS' rows "
+        "before filing; the zero-basis fallback (US-INTERP-MISSING-"
+        "BASIS) inflates future gain on disposal.",
+        "    - Document beneficial ownership of OWN_WALLET_2 to "
+        "preserve the non-realization position under "
+        "US-INTERP-INTERNAL-TRANSFER.",
+        "    - Disclose the failed-transaction fee position "
+        "(US-INTERP-FAILED-TX-FEE) on the return if material.",
+        "",
+    ]
 
-    lines += [sep,
-              "ILLUSTRATIVE OUTPUT  --  NOT TAX OR LEGAL ADVICE.",
-              "Verbatim excerpts marked [UNVERIFIED] are placeholders;",
-              "this report is NOT authoritative until they are populated",
-              "from a real RAG retriever.",
-              sep]
+    lines += [
+        sep,
+        "ILLUSTRATIVE OUTPUT  --  NOT TAX OR LEGAL ADVICE.",
+        "Verbatim excerpts marked [UNVERIFIED] are placeholders;",
+        "this report is NOT authoritative until they are populated",
+        "from a real RAG retriever.",
+        sep,
+    ]
     return "\n".join(lines)
 
 

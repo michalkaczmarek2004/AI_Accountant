@@ -18,6 +18,7 @@ Assumptions baked in (would be user-elected in a real audit):
     Fiat = USD
     Prices = static stub (PRICE_USD), NOT a real oracle
 """
+
 from __future__ import annotations
 
 import sys
@@ -71,8 +72,7 @@ RAW_TRANSACTIONS: list[dict[str, Any]] = [
         "fee": 5_000,
         "feePayer": EXT_CEX,
         "nativeTransfers": [
-            {"fromUserAccount": EXT_CEX, "toUserAccount": WALLET,
-             "amount": 10_000_000_000},
+            {"fromUserAccount": EXT_CEX, "toUserAccount": WALLET, "amount": 10_000_000_000},
         ],
         "tokenTransfers": [],
     },
@@ -87,13 +87,18 @@ RAW_TRANSACTIONS: list[dict[str, Any]] = [
         "fee": 9_000,
         "feePayer": WALLET,
         "nativeTransfers": [
-            {"fromUserAccount": WALLET, "toUserAccount": EXT_LP,
-             "amount": 2_000_000_000},
+            {"fromUserAccount": WALLET, "toUserAccount": EXT_LP, "amount": 2_000_000_000},
         ],
         "tokenTransfers": [
-            {"fromUserAccount": EXT_LP, "toUserAccount": WALLET,
-             "fromTokenAccount": "FromUSDC1", "toTokenAccount": "ToUSDC1",
-             "tokenAmount": "410", "mint": USDC_MINT, "tokenSymbol": "USDC"},
+            {
+                "fromUserAccount": EXT_LP,
+                "toUserAccount": WALLET,
+                "fromTokenAccount": "FromUSDC1",
+                "toTokenAccount": "ToUSDC1",
+                "tokenAmount": "410",
+                "mint": USDC_MINT,
+                "tokenSymbol": "USDC",
+            },
         ],
     },
     # 3) Staking reward -- ordinary income at FMV.
@@ -107,8 +112,7 @@ RAW_TRANSACTIONS: list[dict[str, Any]] = [
         "fee": 0,
         "feePayer": WALLET,
         "nativeTransfers": [
-            {"fromUserAccount": EXT_STAKE, "toUserAccount": WALLET,
-             "amount": 50_000_000},
+            {"fromUserAccount": EXT_STAKE, "toUserAccount": WALLET, "amount": 50_000_000},
         ],
         "tokenTransfers": [],
     },
@@ -124,9 +128,15 @@ RAW_TRANSACTIONS: list[dict[str, Any]] = [
         "feePayer": EXT_AIRDROP,
         "nativeTransfers": [],
         "tokenTransfers": [
-            {"fromUserAccount": EXT_AIRDROP, "toUserAccount": WALLET,
-             "fromTokenAccount": "FromBonk1", "toTokenAccount": "ToBonk1",
-             "tokenAmount": "1000000", "mint": BONK_MINT, "tokenSymbol": "BONK"},
+            {
+                "fromUserAccount": EXT_AIRDROP,
+                "toUserAccount": WALLET,
+                "fromTokenAccount": "FromBonk1",
+                "toTokenAccount": "ToBonk1",
+                "tokenAmount": "1000000",
+                "mint": BONK_MINT,
+                "tokenSymbol": "BONK",
+            },
         ],
     },
     # 5) High-slippage swap SOL -> BONK -- capital event AND risk flag.
@@ -142,13 +152,18 @@ RAW_TRANSACTIONS: list[dict[str, Any]] = [
         "fee": 12_000,
         "feePayer": WALLET,
         "nativeTransfers": [
-            {"fromUserAccount": WALLET, "toUserAccount": EXT_LP,
-             "amount": 1_000_000_000},
+            {"fromUserAccount": WALLET, "toUserAccount": EXT_LP, "amount": 1_000_000_000},
         ],
         "tokenTransfers": [
-            {"fromUserAccount": EXT_LP, "toUserAccount": WALLET,
-             "fromTokenAccount": "FromBonk2", "toTokenAccount": "ToBonk2",
-             "tokenAmount": "30000000", "mint": BONK_MINT, "tokenSymbol": "BONK"},
+            {
+                "fromUserAccount": EXT_LP,
+                "toUserAccount": WALLET,
+                "fromTokenAccount": "FromBonk2",
+                "toTokenAccount": "ToBonk2",
+                "tokenAmount": "30000000",
+                "mint": BONK_MINT,
+                "tokenSymbol": "BONK",
+            },
         ],
     },
     # 6) Inbound USDC from unknown source -- MISSING BASIS.
@@ -163,9 +178,15 @@ RAW_TRANSACTIONS: list[dict[str, Any]] = [
         "feePayer": EXT_UNKNOWN,
         "nativeTransfers": [],
         "tokenTransfers": [
-            {"fromUserAccount": EXT_UNKNOWN, "toUserAccount": WALLET,
-             "fromTokenAccount": "FromUSDC2", "toTokenAccount": "ToUSDC2",
-             "tokenAmount": "500", "mint": USDC_MINT, "tokenSymbol": "USDC"},
+            {
+                "fromUserAccount": EXT_UNKNOWN,
+                "toUserAccount": WALLET,
+                "fromTokenAccount": "FromUSDC2",
+                "toTokenAccount": "ToUSDC2",
+                "tokenAmount": "500",
+                "mint": USDC_MINT,
+                "tokenSymbol": "USDC",
+            },
         ],
     },
     # 7) Internal transfer to second own wallet -- non-taxable.
@@ -179,8 +200,7 @@ RAW_TRANSACTIONS: list[dict[str, Any]] = [
         "fee": 5_000,
         "feePayer": WALLET,
         "nativeTransfers": [
-            {"fromUserAccount": WALLET, "toUserAccount": OWN_WALLET_2,
-             "amount": 5_000_000_000},
+            {"fromUserAccount": WALLET, "toUserAccount": OWN_WALLET_2, "amount": 5_000_000_000},
         ],
         "tokenTransfers": [],
     },
@@ -207,6 +227,7 @@ RAW_TRANSACTIONS: list[dict[str, Any]] = [
 class _OfflineSession:
     def get(self, *_a: Any, **_k: Any) -> Any:
         raise RuntimeError("Demo runs offline.")
+
     def close(self) -> None:
         return None
 
@@ -248,22 +269,23 @@ class Lot:
     source: str
 
     def __repr__(self) -> str:
-        return (f"Lot({self.units} @ ${self.basis_usd_per_unit}/u, "
-                f"acq={self.acquired}, src={self.source})")
+        return (
+            f"Lot({self.units} @ ${self.basis_usd_per_unit}/u, "
+            f"acq={self.acquired}, src={self.source})"
+        )
 
 
 @dataclass
 class Ledger:
-    lots: dict[str, deque[Lot]] = field(
-        default_factory=lambda: defaultdict(deque))
+    lots: dict[str, deque[Lot]] = field(default_factory=lambda: defaultdict(deque))
     missing_basis: list[dict[str, Any]] = field(default_factory=list)
 
-    def acquire(self, asset: str, units: Decimal,
-                basis_per_unit: Decimal, acquired: str, source: str) -> None:
+    def acquire(
+        self, asset: str, units: Decimal, basis_per_unit: Decimal, acquired: str, source: str
+    ) -> None:
         self.lots[asset].append(Lot(acquired, units, basis_per_unit, source))
 
-    def dispose_fifo(self, asset: str, units: Decimal,
-                     signature: str, date: str) -> Decimal:
+    def dispose_fifo(self, asset: str, units: Decimal, signature: str, date: str) -> Decimal:
         basis_consumed = Decimal("0")
         remaining = units
         queue = self.lots[asset]
@@ -276,13 +298,15 @@ class Ledger:
             if head.units == 0:
                 queue.popleft()
         if remaining > 0:
-            self.missing_basis.append({
-                "asset": asset,
-                "units_unbacked": remaining,
-                "signature": signature,
-                "date": date,
-                "reason": "Disposal exceeds tracked acquisitions",
-            })
+            self.missing_basis.append(
+                {
+                    "asset": asset,
+                    "units_unbacked": remaining,
+                    "signature": signature,
+                    "date": date,
+                    "reason": "Disposal exceeds tracked acquisitions",
+                }
+            )
         return basis_consumed
 
 
@@ -296,9 +320,7 @@ def classify(row: pd.Series) -> str:
     in_movs = row["movements_in"] or []
     out_movs = row["movements_out"] or []
 
-    counterparties = {
-        m["counterparty"] for m in (in_movs + out_movs) if m.get("counterparty")
-    }
+    counterparties = {m["counterparty"] for m in (in_movs + out_movs) if m.get("counterparty")}
     if counterparties and counterparties.issubset(OWN_WALLETS):
         return "Internal transfer (non-taxable)"
 
@@ -321,9 +343,12 @@ def classify(row: pd.Series) -> str:
 # ---------------------------------------------------------------------------
 EXTERNAL_BASIS: dict[str, list[Lot]] = {
     "demo-001-cex-deposit": [
-        Lot(acquired="2024-12-15", units=Decimal("10"),
+        Lot(
+            acquired="2024-12-15",
+            units=Decimal("10"),
             basis_usd_per_unit=Decimal("200"),
-            source="external (CEX export, illustrative)"),
+            source="external (CEX export, illustrative)",
+        ),
     ],
 }
 
@@ -347,17 +372,20 @@ def run_pipeline(df: pd.DataFrame) -> tuple[pd.DataFrame, Ledger, list[dict]]:
 
         if sig in EXTERNAL_BASIS:
             for lot in EXTERNAL_BASIS[sig]:
-                ledger.acquire(asset="SOL", units=lot.units,
-                               basis_per_unit=lot.basis_usd_per_unit,
-                               acquired=lot.acquired, source=lot.source)
+                ledger.acquire(
+                    asset="SOL",
+                    units=lot.units,
+                    basis_per_unit=lot.basis_usd_per_unit,
+                    acquired=lot.acquired,
+                    source=lot.source,
+                )
             category = "External acquisition (basis seeded)"
 
         elif category == "Staking income (ordinary)":
             for m in row["movements_in"]:
                 px = price_usd(m["symbol"], date)
                 if px is None:
-                    findings.append({"sig": sig, "issue": "missing price",
-                                     "asset": m["symbol"]})
+                    findings.append({"sig": sig, "issue": "missing price", "asset": m["symbol"]})
                     continue
                 amt = Decimal(m["amount"])
                 income_usd += amt * px
@@ -367,8 +395,7 @@ def run_pipeline(df: pd.DataFrame) -> tuple[pd.DataFrame, Ledger, list[dict]]:
             for m in row["movements_in"]:
                 px = price_usd(m["symbol"], date)
                 if px is None:
-                    findings.append({"sig": sig, "issue": "missing price",
-                                     "asset": m["symbol"]})
+                    findings.append({"sig": sig, "issue": "missing price", "asset": m["symbol"]})
                     continue
                 amt = Decimal(m["amount"])
                 income_usd += amt * px
@@ -378,8 +405,7 @@ def run_pipeline(df: pd.DataFrame) -> tuple[pd.DataFrame, Ledger, list[dict]]:
             for m in row["movements_in"]:
                 px = price_usd(m["symbol"], date)
                 if px is None:
-                    findings.append({"sig": sig, "issue": "missing price",
-                                     "asset": m["symbol"]})
+                    findings.append({"sig": sig, "issue": "missing price", "asset": m["symbol"]})
                     continue
                 proceeds_usd += Decimal(m["amount"]) * px
             for m in row["movements_out"]:
@@ -390,8 +416,7 @@ def run_pipeline(df: pd.DataFrame) -> tuple[pd.DataFrame, Ledger, list[dict]]:
                 px = price_usd(m["symbol"], date)
                 if px is None:
                     continue
-                ledger.acquire(m["symbol"], Decimal(m["amount"]),
-                               px, date, "swap")
+                ledger.acquire(m["symbol"], Decimal(m["amount"]), px, date, "swap")
             # Slippage detection — compare implied execution price (in_value_usd / out_units)
             # to the oracle reference price for the out-asset on the swap date.
             # ILLUSTRATIVE — production needs a real quote provider (e.g. Jupiter quote
@@ -413,61 +438,69 @@ def run_pipeline(df: pd.DataFrame) -> tuple[pd.DataFrame, Ledger, list[dict]]:
                         in_value_usd = Decimal("0")
                         break
                     in_value_usd += Decimal(m["amount"]) * in_px
-                if (
-                    oracle_px is not None
-                    and oracle_px > 0
-                    and out_units > 0
-                    and in_value_usd > 0
-                ):
+                if oracle_px is not None and oracle_px > 0 and out_units > 0 and in_value_usd > 0:
                     implied_px = in_value_usd / out_units
                     slip_pct = (oracle_px - implied_px) / oracle_px
                     if slip_pct > Decimal("0.05"):
-                        findings.append({
-                            "sig": sig,
-                            "issue": "Possible high slippage (implied execution price below oracle reference)",
-                            "implied_slippage_pct": f"{(slip_pct * 100).quantize(TWO_PLACES)}%",
-                        })
+                        findings.append(
+                            {
+                                "sig": sig,
+                                "issue": "Possible high slippage (implied execution price below oracle reference)",
+                                "implied_slippage_pct": f"{(slip_pct * 100).quantize(TWO_PLACES)}%",
+                            }
+                        )
 
         elif category == "Inbound deposit -- UNKNOWN BASIS":
             for m in row["movements_in"]:
                 amt = Decimal(m["amount"])
-                ledger.acquire(m["symbol"], amt, Decimal("0"),
-                               date, "unknown")
-                ledger.missing_basis.append({
-                    "asset": m["symbol"], "units_unbacked": amt,
-                    "signature": sig, "date": date,
-                    "reason": "External counterparty, no income classification",
-                })
+                ledger.acquire(m["symbol"], amt, Decimal("0"), date, "unknown")
+                ledger.missing_basis.append(
+                    {
+                        "asset": m["symbol"],
+                        "units_unbacked": amt,
+                        "signature": sig,
+                        "date": date,
+                        "reason": "External counterparty, no income classification",
+                    }
+                )
 
         elif category == "Internal transfer (non-taxable)":
-            findings.append({
-                "sig": sig,
-                "issue": ("Internal transfer -- basis must follow asset to "
-                          "OWN_WALLET_2; single-wallet view is partial."),
-            })
+            findings.append(
+                {
+                    "sig": sig,
+                    "issue": (
+                        "Internal transfer -- basis must follow asset to "
+                        "OWN_WALLET_2; single-wallet view is partial."
+                    ),
+                }
+            )
 
         elif category == "Failed transaction":
-            findings.append({
-                "sig": sig,
-                "issue": "Failed tx -- fee paid but no economic outcome; "
-                         "fee deductibility uncertain under US current law.",
-            })
+            findings.append(
+                {
+                    "sig": sig,
+                    "issue": "Failed tx -- fee paid but no economic outcome; "
+                    "fee deductibility uncertain under US current law.",
+                }
+            )
 
         fee_usd = Decimal("0")
         if row["fee_paid_by_wallet"]:
             sol_px = price_usd("SOL", date) or Decimal("0")
             fee_usd = Decimal(row["fee_sol"]) * sol_px
 
-        rows.append({
-            "signature": sig,
-            "date": date,
-            "category": category,
-            "income_usd": income_usd.quantize(TWO_PLACES),
-            "proceeds_usd": proceeds_usd.quantize(TWO_PLACES),
-            "basis_usd": basis_usd.quantize(TWO_PLACES),
-            "gain_usd": gain_usd.quantize(TWO_PLACES),
-            "fee_usd": fee_usd.quantize(TWO_PLACES),
-        })
+        rows.append(
+            {
+                "signature": sig,
+                "date": date,
+                "category": category,
+                "income_usd": income_usd.quantize(TWO_PLACES),
+                "proceeds_usd": proceeds_usd.quantize(TWO_PLACES),
+                "basis_usd": basis_usd.quantize(TWO_PLACES),
+                "gain_usd": gain_usd.quantize(TWO_PLACES),
+                "fee_usd": fee_usd.quantize(TWO_PLACES),
+            }
+        )
 
     classified = pd.DataFrame(rows)
     return classified, ledger, findings
@@ -483,8 +516,8 @@ def consistency_checks(classified: pd.DataFrame, ledger: Ledger) -> list[str]:
             expected = (r["proceeds_usd"] - r["basis_usd"]).quantize(TWO_PLACES)
             if expected != r["gain_usd"]:
                 issues.append(
-                    f"{r['signature']}: gain != proceeds - basis "
-                    f"({r['gain_usd']} vs {expected})")
+                    f"{r['signature']}: gain != proceeds - basis ({r['gain_usd']} vs {expected})"
+                )
     for asset, queue in ledger.lots.items():
         for lot in queue:
             if lot.units < 0:
@@ -495,44 +528,55 @@ def consistency_checks(classified: pd.DataFrame, ledger: Ledger) -> list[str]:
 # ---------------------------------------------------------------------------
 # 8. Report
 # ---------------------------------------------------------------------------
-def render_report(classified: pd.DataFrame, ledger: Ledger,
-                  findings: list[dict], checks: list[str]) -> str:
+def render_report(
+    classified: pd.DataFrame, ledger: Ledger, findings: list[dict], checks: list[str]
+) -> str:
     total_income = classified["income_usd"].sum()
     total_gain = classified["gain_usd"].sum()
     total_fee = classified["fee_usd"].sum()
-    by_cat = classified.groupby("category")[
-        ["income_usd", "gain_usd", "fee_usd"]].sum()
+    by_cat = classified.groupby("category")[["income_usd", "gain_usd", "fee_usd"]].sum()
 
     lines: list[str] = []
     sep = "=" * 78
     sub = "-" * 78
-    lines += [sep,
-              "AI ACCOUNTANT  --  ILLUSTRATIVE AUDIT REPORT",
-              f"Wallet:        {WALLET}",
-              "Period:        2024-12-15 -> 2025-05-03 (synthetic)",
-              "Jurisdiction:  US federal (assumed)",
-              "Method:        FIFO, single-wallet, base fiat USD",
-              "Price source:  static stub (NOT a real oracle)",
-              sep, "",
-              "EXECUTIVE SUMMARY", sub,
-              f"  Ordinary income (staking + airdrops):   $ {total_income:>12}",
-              f"  Net realized capital gain / (loss):     $ {total_gain:>12}",
-              f"  Network fees paid by wallet:            $ {total_fee:>12}",
-              "  Internal-consistency checks:           "
-              f" {'PASS' if not checks else 'FAIL ('+str(len(checks))+')'}",
-              "",
-              "BREAKDOWN BY CATEGORY", sub,
-              by_cat.to_string(), "",
-              "PER-TRANSACTION DETAIL", sub,
-              classified.to_string(index=False), "",
-              "REMAINING OPEN LOTS (post-period, FIFO order)", sub]
+    lines += [
+        sep,
+        "AI ACCOUNTANT  --  ILLUSTRATIVE AUDIT REPORT",
+        f"Wallet:        {WALLET}",
+        "Period:        2024-12-15 -> 2025-05-03 (synthetic)",
+        "Jurisdiction:  US federal (assumed)",
+        "Method:        FIFO, single-wallet, base fiat USD",
+        "Price source:  static stub (NOT a real oracle)",
+        sep,
+        "",
+        "EXECUTIVE SUMMARY",
+        sub,
+        f"  Ordinary income (staking + airdrops):   $ {total_income:>12}",
+        f"  Net realized capital gain / (loss):     $ {total_gain:>12}",
+        f"  Network fees paid by wallet:            $ {total_fee:>12}",
+        "  Internal-consistency checks:           "
+        f" {'PASS' if not checks else 'FAIL (' + str(len(checks)) + ')'}",
+        "",
+        "BREAKDOWN BY CATEGORY",
+        sub,
+        by_cat.to_string(),
+        "",
+        "PER-TRANSACTION DETAIL",
+        sub,
+        classified.to_string(index=False),
+        "",
+        "REMAINING OPEN LOTS (post-period, FIFO order)",
+        sub,
+    ]
     if not ledger.lots:
         lines.append("  (none)")
     for asset, queue in ledger.lots.items():
         for lot in queue:
-            lines.append(f"  {asset:<6} {str(lot.units):>20} units "
-                         f"@ ${lot.basis_usd_per_unit:<10} "
-                         f"acq {lot.acquired}  src={lot.source}")
+            lines.append(
+                f"  {asset:<6} {str(lot.units):>20} units "
+                f"@ ${lot.basis_usd_per_unit:<10} "
+                f"acq {lot.acquired}  src={lot.source}"
+            )
     lines += ["", "RISK FINDINGS", sub]
     if not findings:
         lines.append("  (none)")
@@ -546,11 +590,17 @@ def render_report(classified: pd.DataFrame, ledger: Ledger,
         lines += ["", "INTERNAL CHECK FAILURES", sub]
         for c in checks:
             lines.append(f"  - {c}")
-    lines += ["", "STRATEGIC MOVES", sub, _strategic_moves(ledger), "",
-              sep,
-              "ILLUSTRATIVE OUTPUT  --  NOT TAX OR LEGAL ADVICE.",
-              "Synthetic data, synthetic prices, single-wallet view, US defaults.",
-              sep]
+    lines += [
+        "",
+        "STRATEGIC MOVES",
+        sub,
+        _strategic_moves(ledger),
+        "",
+        sep,
+        "ILLUSTRATIVE OUTPUT  --  NOT TAX OR LEGAL ADVICE.",
+        "Synthetic data, synthetic prices, single-wallet view, US defaults.",
+        sep,
+    ]
     return "\n".join(lines)
 
 
@@ -566,7 +616,8 @@ def _strategic_moves(ledger: Ledger) -> str:
                 underwater.append(
                     f"{asset}: {lot.units} units acquired {lot.acquired} "
                     f"@ ${lot.basis_usd_per_unit} (now ${cur}, "
-                    f"unrealized ${unrealized.quantize(TWO_PLACES)})")
+                    f"unrealized ${unrealized.quantize(TWO_PLACES)})"
+                )
 
     block = []
     block.append("[CONFIRMED CURRENT LAW -- US federal]")
