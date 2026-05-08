@@ -259,5 +259,58 @@ class TransactionParserSchemaTests(unittest.TestCase):
         self.assertEqual(row_other["native_net_sol"], Decimal("0"))
 
 
+def _minimal_tx(**overrides):
+    base = {
+        "signature": "sig-test",
+        "slot": 1,
+        "timestamp": 1_700_000_000,
+        "type": "TRANSFER",
+        "source": "SYSTEM",
+        "fee": 5_000,
+        "feePayer": "86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY",
+        "nativeTransfers": [],
+        "tokenTransfers": [],
+    }
+    base.update(overrides)
+    return base
+
+
+class ProgramIdsParserTests(unittest.TestCase):
+    def test_extracts_program_ids_in_order(self) -> None:
+        tx = _minimal_tx(instructions=[
+            {"programId": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"},
+            {"programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},
+        ])
+        row = TransactionParser("86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY").parse(tx)
+        self.assertEqual(row["program_ids"], [
+            "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        ])
+
+    def test_deduplicates_program_ids_preserving_order(self) -> None:
+        tx = _minimal_tx(instructions=[
+            {"programId": "AAA111"},
+            {"programId": "BBB222"},
+            {"programId": "AAA111"},
+        ])
+        row = TransactionParser("86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY").parse(tx)
+        self.assertEqual(row["program_ids"], ["AAA111", "BBB222"])
+
+    def test_program_ids_empty_when_instructions_absent(self) -> None:
+        tx = _minimal_tx()
+        row = TransactionParser("86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY").parse(tx)
+        self.assertEqual(row["program_ids"], [])
+
+    def test_program_ids_empty_when_instructions_empty(self) -> None:
+        tx = _minimal_tx(instructions=[])
+        row = TransactionParser("86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY").parse(tx)
+        self.assertEqual(row["program_ids"], [])
+
+    def test_instructions_without_program_id_are_skipped(self) -> None:
+        tx = _minimal_tx(instructions=[{"data": "abc"}, {"programId": "XYZ999"}])
+        row = TransactionParser("86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY").parse(tx)
+        self.assertEqual(row["program_ids"], ["XYZ999"])
+
+
 if __name__ == "__main__":
     unittest.main()
