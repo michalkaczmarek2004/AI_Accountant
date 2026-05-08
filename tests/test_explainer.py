@@ -3,7 +3,36 @@ from __future__ import annotations
 import unittest
 from decimal import Decimal
 
-from ai_accountant.explainer import _format_sol, _shorten_address
+import pandas as pd
+
+from ai_accountant.explainer import (
+    TransactionExplanation,
+    _format_sol,
+    _shorten_address,
+    explain_row,
+)
+
+_SIG = "AbcDEFGH12345678abcdefgh12345678abcdefgh12345678abcdefgh1234567"
+
+
+def _base_row(**overrides) -> pd.Series:
+    row = {
+        "tag_type": "Transfer",
+        "tag_protocol": "Unknown",
+        "tag_assets": "SOL",
+        "tag_amount_display": "1 SOL",
+        "tag_confidence": 0.8,
+        "source": "UNKNOWN",
+        "status": "succeeded",
+        "fee_sol": Decimal("0.000005"),
+        "native_net_sol": Decimal("1.0"),
+        "token_flow_details": [],
+        "date": "2024-01-01",
+        "signature": _SIG,
+        "description": "SOL transfer",
+    }
+    row.update(overrides)
+    return pd.Series(row)
 
 
 class ShortenAddressTests(unittest.TestCase):
@@ -35,38 +64,6 @@ class FormatSolTests(unittest.TestCase):
 
     def test_none_treated_as_zero(self):
         self.assertEqual(_format_sol(None), "0 SOL")
-
-
-if __name__ == "__main__":
-    unittest.main()
-
-
-import pandas as pd
-from typing import Any
-
-from ai_accountant.explainer import TransactionExplanation, explain_row
-
-_SIG = "AbcDEFGH12345678abcdefgh12345678abcdefgh12345678abcdefgh1234567"
-
-
-def _base_row(**overrides) -> pd.Series:
-    row = {
-        "tag_type": "Transfer",
-        "tag_protocol": "Unknown",
-        "tag_assets": "SOL",
-        "tag_amount_display": "1 SOL",
-        "tag_confidence": 0.8,
-        "source": "UNKNOWN",
-        "status": "succeeded",
-        "fee_sol": Decimal("0.000005"),
-        "native_net_sol": Decimal("1.0"),
-        "token_flow_details": [],
-        "date": "2024-01-01",
-        "signature": _SIG,
-        "description": "SOL transfer",
-    }
-    row.update(overrides)
-    return pd.Series(row)
 
 
 class ExplainRowTests(unittest.TestCase):
@@ -164,3 +161,7 @@ class ExplainRowTests(unittest.TestCase):
         self.assertEqual(exp.event_title, "Unknown activity")
         self.assertEqual(exp.review_label, "Needs review")
         self.assertIn("low_confidence", exp.tags)
+
+
+if __name__ == "__main__":
+    unittest.main()

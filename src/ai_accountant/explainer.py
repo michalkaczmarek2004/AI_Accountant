@@ -215,7 +215,7 @@ def _build_unknown_facts(row: pd.Series, case: str) -> list[str]:
     if case == "unknown" and _safe_str(row.get("tag_protocol"), "") == "Unknown":
         facts.append("The program that processed this transaction is not recognized.")
         facts.append("The purpose of this transaction is unclear.")
-    if case in _TAX_CASES:
+    if case in _TAX_CASES and _safe_str(row.get("status"), "") != "failed":
         facts.append(
             "Your tax country is not set — whether this event is taxable "
             "depends on your jurisdiction."
@@ -229,7 +229,7 @@ def _build_suggested_actions(row: pd.Series, case: str, tags: list[str]) -> list
         actions.append("Label the source of this transfer.")
     if case == "unknown" and "unknown_program" in tags:
         actions.append("Review this unknown program interaction.")
-    if case in _TAX_CASES:
+    if case in _TAX_CASES and _safe_str(row.get("status"), "") != "failed":
         actions.append("Add cost basis for this asset.")
     if "low_confidence" in tags:
         actions.append("Mark this transaction as reviewed.")
