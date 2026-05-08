@@ -15,7 +15,7 @@ import pandas as pd
 
 from ..addresses import validate_address
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 _ADDRESS_PATTERN = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
 
 

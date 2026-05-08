@@ -33,5 +33,19 @@ class DataFrameModuleTests(unittest.TestCase):
         self.assertIsInstance(df, pd.DataFrame)
 
 
+class DataFrameNewColumnsTests(unittest.TestCase):
+    def test_new_columns_present_in_dataframe_columns(self) -> None:
+        for col in (
+            "program_ids", "tag_type", "tag_protocol", "tag_assets",
+            "tag_amount_display", "tag_usd_estimate", "tag_confidence",
+        ):
+            self.assertIn(col, DATAFRAME_COLUMNS, f"missing: {col}")
+
+    def test_new_columns_after_existing_columns(self) -> None:
+        idx_signature = DATAFRAME_COLUMNS.index("signature")
+        idx_tag = DATAFRAME_COLUMNS.index("tag_type")
+        self.assertGreater(idx_tag, idx_signature)
+
+
 if __name__ == "__main__":
     unittest.main()

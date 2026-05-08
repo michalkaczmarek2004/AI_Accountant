@@ -173,5 +173,10 @@ class CacheAddressValidationTests(unittest.TestCase):
             cache_mod.forget("../etc", cache_root=Path("."))
 
 
+class CacheSchemaVersionTests(unittest.TestCase):
+    def test_schema_version_is_two(self) -> None:
+        self.assertEqual(cache_mod.SCHEMA_VERSION, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

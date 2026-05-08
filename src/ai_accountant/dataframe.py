@@ -39,6 +39,13 @@ DATAFRAME_COLUMNS: list[str] = [
     "raw_native_transfers",
     "raw_token_transfers",
     "transaction_error",
+    "program_ids",
+    "tag_type",
+    "tag_protocol",
+    "tag_assets",
+    "tag_amount_display",
+    "tag_usd_estimate",
+    "tag_confidence",
 ]
 
 
