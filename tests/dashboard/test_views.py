@@ -144,6 +144,19 @@ class WalletPageTests(unittest.TestCase):
         self.assertIsNone(ctx["meta"])
         self.assertEqual(ctx["transactions_total"], 0)
 
+    def test_transactions_contains_paired_explanation_tuples(self) -> None:
+        from ai_accountant.explainer import TransactionExplanation
+
+        ctx = wallet_page(_df([_row()]), spec=FilterSpec(), meta=_meta(), address=WALLET)
+        txs = ctx["transactions"]
+        self.assertEqual(len(txs), 1)
+        row_dict, exp = txs[0]
+        self.assertIsInstance(row_dict, dict)
+        self.assertIsInstance(exp, TransactionExplanation)
+        self.assertIsInstance(exp.event_title, str)
+        self.assertIsInstance(exp.tags, list)
+        self.assertIsInstance(exp.confidence_percent, int)
+
 
 class TransactionDetailTests(unittest.TestCase):
     def test_returns_row_dict_for_known_signature(self) -> None:
@@ -170,7 +183,7 @@ class TransactionRowTagFieldsTests(unittest.TestCase):
             program_ids=[],
         )
         ctx = wallet_page(_df([row]), spec=FilterSpec(), meta=_meta(), address=WALLET)
-        tx = ctx["transactions"][0]
+        tx, _exp = ctx["transactions"][0]
         self.assertEqual(tx["tag_type"], "Swap")
         self.assertEqual(tx["tag_protocol"], "Jupiter")
         self.assertEqual(tx["tag_assets"], "SOL → USDC")
@@ -189,7 +202,7 @@ class TransactionRowTagFieldsTests(unittest.TestCase):
             program_ids=["AAABBBCCC111222333", "DDDEEEFFF444555666"],
         )
         ctx = wallet_page(_df([row]), spec=FilterSpec(), meta=_meta(), address=WALLET)
-        tx = ctx["transactions"][0]
+        tx, _exp = ctx["transactions"][0]
         self.assertIn("AAABBBCC", tx["fallback_programs"])
 
     def test_filter_options_includes_tag_types(self) -> None:

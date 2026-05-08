@@ -9,6 +9,7 @@ from typing import Any
 
 import pandas as pd
 
+from ..explainer import explain_row
 from ..report import (
     _asset_flow_rows,
     _format_decimal,
@@ -48,6 +49,7 @@ def wallet_page(
     mix = _transaction_type_rows(filtered)
     risk = _risk_rows(filtered)
     tx_rows = _transaction_rows(page_slice, limit=PAGE_SIZE)
+    tx_explanations = [explain_row(row) for _, row in page_slice.iterrows()]
 
     balance_points = _balance_points(filtered)
     activity_buckets = _activity_buckets(filtered)
@@ -62,7 +64,7 @@ def wallet_page(
         "asset_flow": asset_flow,
         "transaction_mix": mix,
         "review_queue": risk,
-        "transactions": tx_rows,
+        "transactions": list(zip(tx_rows, tx_explanations)),
         "transactions_total": total,
         "transactions_page": page,
         "transactions_pages": pages,

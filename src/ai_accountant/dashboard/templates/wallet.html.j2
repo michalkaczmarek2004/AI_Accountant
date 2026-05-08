@@ -165,7 +165,7 @@
       </tr>
     </thead>
     <tbody>
-      {% for r in transactions %}
+      {% for r, exp in transactions %}
       <tr>
         <td>{{ r.date }}</td>
         <td><mark class="{{ r.status }}">{{ r.status }}</mark></td>
