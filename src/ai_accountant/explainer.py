@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-import pandas as pd
-
 
 @dataclass(frozen=True)
 class TransactionExplanation:
