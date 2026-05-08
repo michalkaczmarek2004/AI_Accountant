@@ -42,6 +42,7 @@ if __name__ == "__main__":
 
 
 import pandas as pd
+from typing import Any
 
 from ai_accountant.explainer import TransactionExplanation, explain_row
 
