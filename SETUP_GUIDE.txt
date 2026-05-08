@@ -1,0 +1,192 @@
+============================================================
+  AI ACCOUNTANT DASHBOARD — SETUP GUIDE (REAL DATA)
+============================================================
+
+
+WHAT YOU NEED
+-------------
+
+  1. Python 3.10 or newer
+     Check if installed: python --version
+     Download from:      https://www.python.org/downloads/
+
+  2. Helius API key (free)
+     Sign up at:         https://dev.helius.xyz
+     (GitHub login works — no credit card needed)
+
+  3. A Solana wallet address
+     Any public Solana address (32–44 character string starting with a
+     letter or number, e.g. 86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY)
+
+  4. This project folder
+     Already on your machine — no download needed.
+
+
+------------------------------------------------------------
+STEP 1 — GET A FREE HELIUS API KEY
+------------------------------------------------------------
+
+  1. Go to https://dev.helius.xyz and sign up.
+  2. Create a new project (any name).
+  3. Copy the API key shown on the dashboard.
+     It looks like: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+
+  The free plan includes 1,000,000 credits per month.
+  Fetching one wallet's full history costs roughly 1 credit per page.
+
+
+------------------------------------------------------------
+STEP 2 — INSTALL DEPENDENCIES
+------------------------------------------------------------
+
+  Open a terminal (PowerShell or Command Prompt) inside the
+  project folder and run:
+
+    pip install -e ".[dev,dashboard]"
+
+  This installs:
+    - pandas   (data processing)
+    - flask    (web dashboard server)
+    - jinja2   (HTML templates)
+    - pytest   (tests)
+    - ruff     (linter)
+
+  Verify the installation worked:
+
+    python -c "from ai_accountant.dashboard.server import create_app; print('OK')"
+
+  Expected output: OK
+
+
+------------------------------------------------------------
+STEP 3 — SET YOUR API KEY
+------------------------------------------------------------
+
+  Option A — Environment variable (recommended):
+
+    Windows PowerShell:
+      $env:HELIUS_API_KEY = "paste-your-key-here"
+
+    macOS / Linux:
+      export HELIUS_API_KEY="paste-your-key-here"
+
+  Option B — Pass it on the command line (see Step 4).
+
+
+------------------------------------------------------------
+STEP 4 — LAUNCH THE DASHBOARD
+------------------------------------------------------------
+
+  Basic launch (reads API key from environment):
+
+    python examples/open_dashboard.py
+
+  The browser opens automatically at http://127.0.0.1:8770
+
+  ---
+
+  Pre-load a wallet immediately on startup:
+
+    python examples/open_dashboard.py --wallet YOUR_WALLET_ADDRESS
+
+  Pass the API key directly (if you skipped Step 3):
+
+    python examples/open_dashboard.py --api-key YOUR_HELIUS_KEY
+
+  All available options:
+
+    --api-key KEY       Helius API key (or use HELIUS_API_KEY env var)
+    --wallet ADDRESS    Pre-fetch this wallet before opening the browser
+    --max-pages N       Pages of history to fetch (default: 5, use 0 for all)
+    --port PORT         Local port for the web UI (default: 8770)
+    --no-browser        Start the server without opening the browser
+
+  Example — fetch everything for a wallet:
+
+    python examples/open_dashboard.py --wallet YOUR_WALLET --max-pages 0
+
+
+------------------------------------------------------------
+STEP 5 — USE THE DASHBOARD
+------------------------------------------------------------
+
+  1. Paste any Solana wallet address into the form and click Open.
+
+  2. The app fetches transaction history from Helius and caches it
+     locally under .ai_accountant/wallets/ inside the project folder.
+
+  3. Use the filter bar to narrow results by:
+       - Date range
+       - Token (SOL or any SPL token mint)
+       - Transaction type (swap, transfer, etc.)
+       - Status (succeeded / failed)
+       - Source program (JUPITER, RAYDIUM, SYSTEM, etc.)
+       - Free-text search
+
+  4. Click Refresh to re-fetch newer transactions at any time.
+
+  5. Click Forget to delete the cached data for a wallet.
+
+  6. Download filtered data using:
+       - Download CSV   — flat spreadsheet export
+       - Download JSON  — structured export
+
+  7. Click any transaction signature to open the full detail view,
+     including net flow, fee, movements, and a link to Solana Explorer.
+
+
+------------------------------------------------------------
+TROUBLESHOOTING
+------------------------------------------------------------
+
+  Error: "Helius API key required"
+    -> Set HELIUS_API_KEY in your environment, or pass --api-key KEY
+
+  Error: "dashboard dependencies not installed"
+    -> Run: pip install -e ".[dashboard]"
+
+  Error: "InvalidSolanaAddressError"
+    -> The wallet address is not a valid Solana address. Check for
+       typos — it must be 32–44 Base58 characters.
+
+  Error: "HeliusAuthenticationError"
+    -> Your API key is wrong or expired. Log in at dev.helius.xyz
+       and copy it again.
+
+  Error: "HeliusRateLimitError"
+    -> Too many requests. Wait a moment, then click Refresh.
+
+  Browser shows "No data cached for this wallet yet"
+    -> Click the Fetch button on the wallet page.
+
+  Port already in use
+    -> Pass a different port: --port 8771
+
+
+------------------------------------------------------------
+WHAT THIS DASHBOARD DOES NOT INCLUDE YET
+------------------------------------------------------------
+
+  The following features are scaffolded in examples/ but are NOT
+  connected to the live dashboard:
+
+    - USD valuation
+      SOL and token amounts are shown as on-chain units only.
+      No price oracle is integrated.
+
+    - Cost-basis / tax calculation
+      The FIFO ledger in examples/audit_demo.py is a demonstration
+      scaffold, not wired into the dashboard.
+
+    - Legal citations
+      The RAG citation layer in examples/legal_grounding.py is an
+      offline illustrative scaffold.
+
+    - Multi-user access / authentication
+      The server binds to 127.0.0.1 only. It is a local tool,
+      not a deployed web application.
+
+
+============================================================
+  Project: AI Accountant  |  https://dev.helius.xyz
+============================================================

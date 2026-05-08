@@ -8,10 +8,16 @@ Python utilities for retrieving and normalizing Solana on-chain activity (via th
 
 ## Commands
 
-Install dev environment:
+Install dev environment (core):
 
 ```powershell
 pip install -e ".[dev]"
+```
+
+Install with the dashboard extra (required for `ai_accountant.dashboard`):
+
+```powershell
+pip install -e ".[dev,dashboard]"
 ```
 
 Run tests (pytest is configured in `pyproject.toml` with `pythonpath = ["src"]` and `testpaths = ["tests"]`):
@@ -20,6 +26,7 @@ Run tests (pytest is configured in `pyproject.toml` with `pythonpath = ["src"]` 
 pytest
 pytest tests/test_client.py                                                # single file
 pytest tests/test_client.py::SolanaDataFetcherTests::test_fetch_transaction_history_uses_before_signature_pagination  # single test
+pytest tests/dashboard/                                                    # dashboard suite only
 ```
 
 Tests use stdlib `unittest`, so they can also be run directly: `python -m unittest tests.test_client`.
@@ -42,9 +49,10 @@ The package lives in `src/ai_accountant/` and is split into seven focused module
 - **`dataframe.py`** — `DATAFRAME_COLUMNS` list + `to_dataframe(parser, transactions)`.
 - **`client.py`** — `SolanaDataFetcher` (HTTP orchestration, retry/pagination, DataFrame helper).
 - **`report.py`** — `render_html_report`, `transaction_export_frame`, `write_wallet_report`. Hand-written self-contained HTML + flat CSV over the parser-level DataFrame; no templating engine, no JS, no external assets. Operates on `DATAFRAME_COLUMNS` only — does not depend on the audit-pipeline scaffolds in `examples/`.
+- **`dashboard/`** — local Flask web dashboard for live Helius data, gated behind the `[dashboard]` optional extra. Sub-modules: `cache.py` (filesystem cache at `.ai_accountant/wallets/<addr>/`, atomic pickle + JSON writes, schema versioning), `filters.py` (querystring → `FilterSpec` dataclass → DataFrame mask), `charts.py` (hand-rolled inline-SVG line + stacked bar renderers, no JS deps), `views.py` (template context builders; reuses `report.py` private helpers for KPI/asset/mix/risk/tx parity), `fetcher.py` (orchestrates Helius fetch + per-address lockfile + cache write; translates every `SolanaDataFetcherError` subclass into `DashboardError`), `server/` (Flask app factory `create_app` + routes), `cli.py` (`dashboard serve`, `dashboard fetch <addr>`). Launch with `python examples/open_dashboard.py` or `dashboard serve` after installing the extra.
 - **`solana_data_fetcher.py`** — backwards-compat re-export shim; scheduled for removal in a future release.
 
-`__init__.py` re-exports the full public surface: `SolanaDataFetcher`, `TransactionParser`, `validate_address`, `DATAFRAME_COLUMNS`, the exception hierarchy, and the report helpers (`render_html_report`, `transaction_export_frame`, `write_wallet_report`).
+`__init__.py` re-exports the full public surface and exposes `__version__ = "0.1.0"`. Public names: `SolanaDataFetcher`, `TransactionParser`, `validate_address`, `DATAFRAME_COLUMNS`, the exception hierarchy, and the report helpers (`render_html_report`, `transaction_export_frame`, `write_wallet_report`).
 
 ### HTTP transport and retry (`client.py`)
 
@@ -80,6 +88,31 @@ Test files mirror the module split:
 | `tests/test_client.py` | `SolanaDataFetcher`, pagination, retry, `iter_transactions` |
 | `tests/test_report.py` | `render_html_report`, `transaction_export_frame`, `write_wallet_report` |
 | `tests/test_compat_shim.py` | `from ai_accountant.solana_data_fetcher import ...` still works |
+| `tests/dashboard/test_cache.py` | filesystem cache layer |
+| `tests/dashboard/test_filters.py` | `FilterSpec` querystring parsing + apply |
+| `tests/dashboard/test_charts.py` | SVG line + bar renderers |
+| `tests/dashboard/test_views.py` | template context builders, KPI parity with `report.py` |
+| `tests/dashboard/test_fetcher.py` | `run_fetch`, `DashboardError` translation, lockfile |
+| `tests/dashboard/test_routes.py` | Flask routes via `app.test_client()` |
+| `tests/dashboard/test_cli.py` | `dashboard {serve,fetch}` argparse |
+
+`tests/dashboard/conftest.py` provides shared pytest fixtures (`synthetic_df`, `wallet_address`).
+
+### Dashboard sub-package (`dashboard/`)
+
+The dashboard is a separate concern from the core data pipeline and must be kept that way. Key design constraints:
+
+**Dependency direction**: `dashboard/` imports from `..report` (private helpers like `_wallet_metrics`, `_asset_flow_rows`, etc.) and `..client`/`..exceptions`. Nothing in the core modules imports from `dashboard/`. If `report.py` private helpers are renamed, `views.py` will break — check both sides.
+
+**`fetcher_factory` injection seam**: `run_fetch` and `create_app` both accept a `fetcher_factory: Callable[[], Any] | None` kwarg. This is the test seam — all route and fetcher tests pass a `_FakeFetcher` via it. Do not remove it or make it keyword-only-without-default.
+
+**Cache schema versioning**: `SCHEMA_VERSION = 1` in `cache.py`. Any change to the pickle schema or `meta.json` keys must bump this constant; `read()` returns `None` on mismatch rather than crashing. The `meta.json` file is human-readable; the `transactions.pkl` is not (protocol 5 pickle).
+
+**Lockfile**: `.refresh.lock` inside the wallet directory prevents concurrent refreshes for the same address. A lock older than `lock_ttl_seconds` (default 1800 s) is considered stale and replaced. The lock is always removed in a `finally` block — including on error.
+
+**`views.py` reuse**: `wallet_page` calls `_wallet_metrics`, `_asset_flow_rows`, `_transaction_type_rows`, `_risk_rows`, `_transaction_rows` from `report.py` directly — same builders used by the static HTML report — so the two surfaces stay in sync without duplicating logic.
+
+**SVG charts are self-contained**: `charts.py` has no Flask or pandas coupling. It takes plain Python sequences and returns `<svg>` strings. Keep it that way.
 
 ## Examples
 
@@ -91,6 +124,7 @@ These call the package's public surface and double as documentation for downstre
 
 - **`examples/demo_html_report.py`** — runs `write_wallet_report` over the synthetic dataset from `audit_demo.py`. No Helius key needed.
 - **`examples/real_wallet_report.py`** — fetches via `SolanaDataFetcher`, then renders with `write_wallet_report`. Requires `HELIUS_API_KEY` (env var or `--api-key`) and a wallet (`SOLANA_WALLET` or `--wallet`).
+- **`examples/open_dashboard.py`** — starts the Flask dashboard and opens it in the browser. Reads `HELIUS_API_KEY` from env (or `--api-key`); optionally pre-fetches a wallet with `--wallet`. Requires the `[dashboard]` extra.
 
 ### Illustrative scaffolds
 

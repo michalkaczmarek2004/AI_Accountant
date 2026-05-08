@@ -1,0 +1,183 @@
+{% extends "base.html.j2" %}
+{% block title %}Wallet {{ address_short }} — AI Accountant{% endblock %}
+{% block body %}
+<section class="wallet-header">
+  <div>
+    <p class="eyebrow">Wallet</p>
+    <h1><code title="{{ address }}">{{ address_short }}</code></h1>
+    {% if meta %}
+    <p class="meta-line">
+      {{ meta.row_count }} transactions • {{ meta.earliest_tx or '—' }} → {{ meta.latest_tx or '—' }} •
+      Fetched {{ meta.fetched_at }} • Pages: {{ meta.pages_fetched }}/{{ meta.max_pages_at_fetch or '∞' }}
+    </p>
+    {% else %}
+    <p class="meta-line">No data cached for this wallet yet.</p>
+    {% endif %}
+  </div>
+  <div class="header-actions">
+    <form method="post" action="{{ url_for('refresh_route', address=address) }}">
+      <button type="submit" class="primary">{% if meta %}Refresh{% else %}Fetch{% endif %}</button>
+    </form>
+    {% if meta %}
+    <form method="post" action="{{ url_for('forget_route', address=address) }}">
+      <button type="submit" class="link-button">Forget</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+
+{% if no_cache %}
+<section class="empty-cache"><p>No data cached for this wallet yet. Click <strong>Fetch</strong> to retrieve from Helius.</p></section>
+{% else %}
+
+<form class="filter-bar" method="get" action="{{ url_for('wallet_page_route', address=address) }}">
+  <label>From <input type="date" name="from" value="{{ filter.date_from.isoformat() if filter.date_from else '' }}"></label>
+  <label>To <input type="date" name="to" value="{{ filter.date_to.isoformat() if filter.date_to else '' }}"></label>
+  <label>Token
+    <select name="token">
+      <option value="">Any</option>
+      {% for value, label in filter_options.tokens %}
+      <option value="{{ value }}" {% if filter.token == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Type
+    <select name="type">
+      <option value="">Any</option>
+      {% for t in filter_options.types %}
+      <option value="{{ t }}" {% if filter.type == t %}selected{% endif %}>{{ t }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Status
+    <select name="status">
+      <option value="">Any</option>
+      <option value="succeeded" {% if filter.status == 'succeeded' %}selected{% endif %}>Succeeded</option>
+      <option value="failed" {% if filter.status == 'failed' %}selected{% endif %}>Failed</option>
+    </select>
+  </label>
+  <label>Source
+    <select name="source">
+      <option value="">Any</option>
+      {% for s in filter_options.sources %}
+      <option value="{{ s }}" {% if filter.source == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Search <input type="search" name="q" value="{{ filter.q or '' }}" placeholder="text"></label>
+  <button type="submit">Apply</button>
+  <a href="{{ url_for('wallet_page_route', address=address) }}" class="clear">Clear</a>
+</form>
+
+<section class="kpi-grid">
+  <article class="kpi"><span>Transactions {% if filter_active %}(filtered){% else %}(all time){% endif %}</span><strong>{{ kpis.total }}</strong></article>
+  <article class="kpi"><span>Succeeded</span><strong>{{ kpis.succeeded }}</strong></article>
+  <article class="kpi"><span>Failed</span><strong>{{ kpis.failed }}</strong></article>
+  <article class="kpi"><span>Sources</span><strong>{{ kpis.sources }}</strong></article>
+  <article class="kpi"><span>Wallet fees</span><strong>{{ kpis.fee_wallet }}</strong></article>
+  <article class="kpi"><span>All parsed fees</span><strong>{{ kpis.fee_total }}</strong></article>
+</section>
+
+<section class="report-section">
+  <h2>Balance over time</h2>
+  {% if filter_active %}<p class="muted">Filter active — chart shows balance change starting from zero within the filter window.</p>{% endif %}
+  {{ balance_chart_svg | safe }}
+</section>
+
+<section class="report-section">
+  <h2>Activity over time</h2>
+  {{ activity_chart_svg | safe }}
+</section>
+
+<section class="report-section">
+  <h2>Asset flow</h2>
+  {% if asset_flow %}
+  <table>
+    <thead><tr><th>Asset</th><th>In</th><th>Out</th><th>Net</th></tr></thead>
+    <tbody>
+      {% for r in asset_flow %}
+      <tr>
+        <td><strong>{{ r.asset }}</strong><span class="muted">{{ r.mint }}</span></td>
+        <td>{{ r.in }}</td>
+        <td>{{ r.out }}</td>
+        <td><mark class="{{ r.direction }}">{{ r.net }}</mark></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="empty">No wallet movements were parsed.</p>{% endif %}
+</section>
+
+<section class="report-section">
+  <h2>Transaction mix</h2>
+  {% if transaction_mix %}
+  <div class="bars">
+    {% for r in transaction_mix %}
+    <div class="bar-row">
+      <div class="bar-label"><strong>{{ r.name }}</strong><span class="muted">{{ r.count }} tx</span></div>
+      <div class="bar-track"><i style="width: {{ r.pct }}%"></i></div>
+      <span class="bar-pct">{{ r.pct }}%</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<p class="empty">No transaction types found.</p>{% endif %}
+</section>
+
+<section class="report-section">
+  <h2>Review queue</h2>
+  {% if review_queue %}
+  <table>
+    <thead><tr><th>Severity</th><th>Item</th><th>Tx</th></tr></thead>
+    <tbody>
+      {% for r in review_queue %}
+      <tr>
+        <td><mark class="severity {{ r.severity|lower }}">{{ r.severity }}</mark></td>
+        <td><strong>{{ r.title }}</strong><span class="muted">{{ r.detail }}</span></td>
+        <td>
+          {% if r.signature %}
+          <a href="{{ url_for('tx_detail_route', address=address, sig=r.signature) }}">{{ r.signature[:8] }}…</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="empty">No obvious review items in the parsed data.</p>{% endif %}
+</section>
+
+<section class="report-section">
+  <h2>Transactions</h2>
+  {% if transactions %}
+  <table>
+    <thead>
+      <tr><th>Date</th><th>Status</th><th>Type</th><th>Net flow</th><th>Fee</th><th>Tx</th></tr>
+    </thead>
+    <tbody>
+      {% for r in transactions %}
+      <tr>
+        <td>{{ r.date }}</td>
+        <td><mark class="{{ r.status }}">{{ r.status }}</mark></td>
+        <td><strong>{{ r.type }}</strong><span class="muted">{{ r.source }}</span></td>
+        <td>{{ r.flow }}</td>
+        <td>{{ r.fee }}</td>
+        <td><a href="{{ url_for('tx_detail_route', address=address, sig=r.signature) }}">{{ r.signature_short }}</a></td>
+      </tr>
+      <tr class="description-row"><td></td><td colspan="5" class="muted">{{ r.description }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <nav class="pagination">
+    Page {{ transactions_page }} of {{ transactions_pages }}
+    {% if transactions_page > 1 %}<a href="?{{ filter.to_querystring() }}{% if filter.to_querystring() %}&{% endif %}page={{ transactions_page - 1 }}">Prev</a>{% endif %}
+    {% if transactions_page < transactions_pages %}<a href="?{{ filter.to_querystring() }}{% if filter.to_querystring() %}&{% endif %}page={{ transactions_page + 1 }}">Next</a>{% endif %}
+  </nav>
+  {% else %}<p class="empty">No transactions match the current filter.</p>{% endif %}
+</section>
+
+<section class="export-bar">
+  <a href="{{ url_for('export_csv_route', address=address) }}?{{ filter.to_querystring() }}">Download CSV (filtered)</a>
+  <a href="{{ url_for('export_json_route', address=address) }}?{{ filter.to_querystring() }}">Download JSON (filtered)</a>
+</section>
+
+{% endif %}
+{% endblock %}

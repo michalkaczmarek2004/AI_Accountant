@@ -2,4 +2,6 @@
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from .fetcher import DashboardError, RefreshLocked, run_fetch
+
+__all__ = ["DashboardError", "RefreshLocked", "run_fetch"]

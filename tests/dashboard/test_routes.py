@@ -1,0 +1,161 @@
+from __future__ import annotations
+
+import sys
+import unittest
+from pathlib import Path
+
+import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+
+from ai_accountant import DATAFRAME_COLUMNS, HeliusAuthenticationError, HeliusRateLimitError
+from ai_accountant.dashboard.server import create_app
+
+WALLET = "86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY"
+WALLET_BAD = "not-a-wallet"
+
+
+class _FakeFetcher:
+    def __init__(self, *, df=None, raises=None) -> None:
+        self.df = df if df is not None else pd.DataFrame(columns=DATAFRAME_COLUMNS)
+        self.raises = raises
+        self.calls = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_a):
+        return None
+
+    def fetch_transactions_dataframe(self, wallet_address, *, max_pages=None, **_kw):
+        self.calls += 1
+        if self.raises is not None:
+            raise self.raises
+        return self.df
+
+
+class _RouteCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = Path(self.id().replace(".", "_") + "_tmp")
+        self.tmp.mkdir(exist_ok=True)
+        self.addCleanup(self._cleanup)
+        self.fake = _FakeFetcher()
+        self.app = create_app(
+            helius_api_key="k",
+            max_pages=5,
+            cache_root=self.tmp,
+            fetcher_factory=lambda: self.fake,
+        )
+        self.app.config["TESTING"] = True
+        self.client = self.app.test_client()
+
+    def _cleanup(self) -> None:
+        import shutil
+
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+
+class LandingRouteTests(_RouteCase):
+    def test_get_landing_renders(self) -> None:
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Solana wallet address", resp.data)
+
+    def test_post_invalid_address_returns_400_with_message(self) -> None:
+        resp = self.client.post("/", data={"address": WALLET_BAD})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(b"address", resp.data.lower())
+
+    def test_post_valid_address_fetches_and_redirects(self) -> None:
+        resp = self.client.post("/", data={"address": WALLET})
+        self.assertEqual(resp.status_code, 303)
+        self.assertIn(WALLET, resp.headers["Location"])
+        self.assertEqual(self.fake.calls, 1)
+
+
+class WalletRouteTests(_RouteCase):
+    def test_uncached_wallet_renders_empty_state(self) -> None:
+        resp = self.client.get(f"/wallet/{WALLET}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"No data cached", resp.data)
+        self.assertEqual(self.fake.calls, 0)
+
+    def test_filter_change_does_not_call_fetcher(self) -> None:
+        self.client.post("/", data={"address": WALLET})
+        self.fake.calls = 0
+        resp = self.client.get(f"/wallet/{WALLET}?status=failed")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self.fake.calls, 0)
+
+    def test_invalid_address_returns_404(self) -> None:
+        resp = self.client.get(f"/wallet/{WALLET_BAD}")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_path_traversal_returns_404(self) -> None:
+        resp = self.client.get("/wallet/..%2Fetc")
+        self.assertEqual(resp.status_code, 404)
+
+
+class RefreshRouteTests(_RouteCase):
+    def test_refresh_calls_fetcher_once_and_redirects(self) -> None:
+        self.client.post("/", data={"address": WALLET})
+        self.fake.calls = 0
+        resp = self.client.post(f"/wallet/{WALLET}/refresh")
+        self.assertEqual(resp.status_code, 303)
+        self.assertEqual(self.fake.calls, 1)
+
+    def test_refresh_with_auth_error_renders_error_page(self) -> None:
+        self.fake.raises = HeliusAuthenticationError("nope")
+        resp = self.client.post(f"/wallet/{WALLET}/refresh")
+        self.assertEqual(resp.status_code, 502)
+        self.assertIn(b"nope", resp.data)
+
+    def test_refresh_with_rate_limit_renders_503(self) -> None:
+        self.fake.raises = HeliusRateLimitError("slow down")
+        resp = self.client.post(f"/wallet/{WALLET}/refresh")
+        self.assertEqual(resp.status_code, 503)
+
+
+class ForgetRouteTests(_RouteCase):
+    def test_forget_removes_cache_and_redirects(self) -> None:
+        self.client.post("/", data={"address": WALLET})
+        resp = self.client.post(f"/wallet/{WALLET}/forget")
+        self.assertEqual(resp.status_code, 303)
+        self.assertFalse((self.tmp / WALLET / "transactions.pkl").exists())
+
+
+class ExportRouteTests(_RouteCase):
+    def test_export_csv_returns_200_with_csv_mimetype(self) -> None:
+        self.client.post("/", data={"address": WALLET})
+        resp = self.client.get(f"/wallet/{WALLET}/export.csv")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.mimetype.startswith("text/csv"))
+
+    def test_export_json_returns_200_with_json_mimetype(self) -> None:
+        self.client.post("/", data={"address": WALLET})
+        resp = self.client.get(f"/wallet/{WALLET}/export.json")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.mimetype.startswith("application/json"))
+
+    def test_empty_filter_export_returns_200_not_404(self) -> None:
+        self.client.post("/", data={"address": WALLET})
+        resp = self.client.get(f"/wallet/{WALLET}/export.csv?status=failed")
+        self.assertEqual(resp.status_code, 200)
+
+
+class TransactionDetailTests(_RouteCase):
+    def test_unknown_signature_returns_404(self) -> None:
+        self.client.post("/", data={"address": WALLET})
+        resp = self.client.get(f"/wallet/{WALLET}/tx/" + "1" * 88)
+        self.assertEqual(resp.status_code, 404)
+
+
+class MalformedQuerystringTests(_RouteCase):
+    def test_bad_date_in_querystring_returns_200(self) -> None:
+        self.client.post("/", data={"address": WALLET})
+        resp = self.client.get(f"/wallet/{WALLET}?from=2025-13-99")
+        self.assertEqual(resp.status_code, 200)
+
+
+if __name__ == "__main__":
+    unittest.main()

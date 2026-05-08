@@ -1,0 +1,53 @@
+{% extends "base.html.j2" %}
+{% block title %}Transaction {{ signature_short }} — AI Accountant{% endblock %}
+{% block body %}
+<p><a href="{{ url_for('wallet_page_route', address=address) }}">← Back to wallet {{ address_short }}</a></p>
+
+<section class="tx-header">
+  <h1>Transaction {{ signature_short }}</h1>
+  <p class="muted">{{ timestamp_iso }}</p>
+  <p>
+    <mark class="{{ status }}">{{ status }}</mark>
+    <mark class="neutral">{{ transaction_type }}</mark>
+    <mark class="neutral">{{ source }}</mark>
+  </p>
+  <p>Signature: <code>{{ signature }}</code> · <a href="{{ explorer_url }}" target="_blank" rel="noreferrer">view on explorer</a></p>
+  <p>Fee: {{ fee_sol }} SOL ({% if fee_paid_by_wallet %}paid by wallet{% else %}paid by another account{% endif %})</p>
+</section>
+
+<section class="report-section">
+  <h2>Net flow</h2>
+  {% if net_flow_rows %}
+  <table>
+    <thead><tr><th>Asset</th><th>Net</th></tr></thead>
+    <tbody>
+      {% for r in net_flow_rows %}
+      <tr><td>{{ r.label }}</td><td>{{ r.amount }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="empty">No net wallet movement.</p>{% endif %}
+</section>
+
+<section class="report-section">
+  <h2>Description</h2>
+  <p>{{ description or '—' }}</p>
+</section>
+
+<section class="report-section">
+  <h2>Movements</h2>
+  <h3>In</h3>
+  {% if movements_in %}<pre>{{ movements_in }}</pre>{% else %}<p class="empty muted">None.</p>{% endif %}
+  <h3>Out</h3>
+  {% if movements_out %}<pre>{{ movements_out }}</pre>{% else %}<p class="empty muted">None.</p>{% endif %}
+</section>
+
+<details class="report-section">
+  <summary>Raw row</summary>
+  <dl>
+    {% for key, value in raw_pairs %}
+    <dt>{{ key }}</dt><dd><code>{{ value }}</code></dd>
+    {% endfor %}
+  </dl>
+</details>
+{% endblock %}
