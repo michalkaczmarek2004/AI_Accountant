@@ -90,7 +90,7 @@ def transaction_detail(df: pd.DataFrame, signature: str, *, address: str) -> dic
 
     net_flow = row.get("net_flow") or {}
     net_flow_rows = []
-    for key, value in (net_flow.items() if isinstance(net_flow, dict) else []):
+    for key, value in net_flow.items() if isinstance(net_flow, dict) else []:
         net_flow_rows.append(
             {
                 "key": str(key),
@@ -204,8 +204,9 @@ def _filter_options(df: pd.DataFrame) -> dict[str, list]:
     tokens: list[tuple[str, str]] = [("SOL", "SOL")]
     types: set[str] = set()
     sources: set[str] = set()
+    tag_types: set[str] = set()
     if df.empty:
-        return {"tokens": tokens, "types": [], "sources": []}
+        return {"tokens": tokens, "types": [], "sources": [], "tag_types": []}
 
     seen_mints: set[str] = set()
     for _, row in df.iterrows():
@@ -225,10 +226,14 @@ def _filter_options(df: pd.DataFrame) -> dict[str, list]:
         src = row.get("source")
         if src:
             sources.add(str(src))
+        tt = row.get("tag_type")
+        if tt:
+            tag_types.add(str(tt))
     return {
         "tokens": tokens,
         "types": sorted(types),
         "sources": sorted(sources),
+        "tag_types": sorted(tag_types),
     }
 
 

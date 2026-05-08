@@ -158,5 +158,52 @@ class TransactionDetailTests(unittest.TestCase):
             transaction_detail(_df([_row()]), "nope", address=WALLET)
 
 
+class TransactionRowTagFieldsTests(unittest.TestCase):
+    def test_transaction_rows_include_tag_fields(self) -> None:
+        row = _row(
+            tag_type="Swap",
+            tag_protocol="Jupiter",
+            tag_assets="SOL → USDC",
+            tag_amount_display="0.5 SOL → 100 USDC",
+            tag_usd_estimate="~125 USD",
+            tag_confidence=0.95,
+            program_ids=[],
+        )
+        ctx = wallet_page(_df([row]), spec=FilterSpec(), meta=_meta(), address=WALLET)
+        tx = ctx["transactions"][0]
+        self.assertEqual(tx["tag_type"], "Swap")
+        self.assertEqual(tx["tag_protocol"], "Jupiter")
+        self.assertEqual(tx["tag_assets"], "SOL → USDC")
+        self.assertEqual(tx["tag_amount_display"], "0.5 SOL → 100 USDC")
+        self.assertEqual(tx["tag_usd_estimate"], "~125 USD")
+        self.assertEqual(tx["tag_confidence_pct"], "95")
+
+    def test_unknown_row_has_fallback_programs(self) -> None:
+        row = _row(
+            tag_type="Unknown",
+            tag_protocol="Unknown",
+            tag_assets="",
+            tag_amount_display="",
+            tag_usd_estimate=None,
+            tag_confidence=0.10,
+            program_ids=["AAABBBCCC111222333", "DDDEEEFFF444555666"],
+        )
+        ctx = wallet_page(_df([row]), spec=FilterSpec(), meta=_meta(), address=WALLET)
+        tx = ctx["transactions"][0]
+        self.assertIn("AAABBBCC", tx["fallback_programs"])
+
+    def test_filter_options_includes_tag_types(self) -> None:
+        rows = [
+            _row(signature="a", tag_type="Swap"),
+            _row(signature="b", tag_type="Transfer"),
+            _row(signature="c", tag_type="Swap"),
+        ]
+        ctx = wallet_page(_df(rows), spec=FilterSpec(), meta=_meta(), address=WALLET)
+        tag_types = ctx["filter_options"]["tag_types"]
+        self.assertIn("Swap", tag_types)
+        self.assertIn("Transfer", tag_types)
+        self.assertEqual(tag_types, sorted(tag_types))
+
+
 if __name__ == "__main__":
     unittest.main()

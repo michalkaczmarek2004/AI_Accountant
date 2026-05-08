@@ -12,7 +12,6 @@ from typing import Any
 
 import pandas as pd
 
-
 EXPORT_COLUMNS = [
     "date",
     "signature",
@@ -286,6 +285,13 @@ def _risk_rows(frame: pd.DataFrame) -> list[dict[str, str]]:
     return rows[:50]
 
 
+def _fallback_programs(row: Any) -> str:
+    pids = row.get("program_ids")
+    if not isinstance(pids, list) or not pids:
+        return ""
+    return ", ".join(str(p)[:8] + "…" for p in pids[:2])
+
+
 def _transaction_rows(frame: pd.DataFrame, *, limit: int) -> list[dict[str, str]]:
     rows = []
     for _, row in frame.head(limit).iterrows():
@@ -302,6 +308,14 @@ def _transaction_rows(frame: pd.DataFrame, *, limit: int) -> list[dict[str, str]
                 "signature": signature,
                 "signature_short": _short(signature, 8),
                 "explorer_url": f"https://explorer.solana.com/tx/{escape(signature)}",
+                "tag_type": str(row.get("tag_type") or "Unknown"),
+                "tag_protocol": str(row.get("tag_protocol") or "Unknown"),
+                "tag_assets": str(row.get("tag_assets") or ""),
+                "tag_amount_display": str(row.get("tag_amount_display") or ""),
+                "tag_usd_estimate": row.get("tag_usd_estimate") or None,
+                "tag_confidence": float(row.get("tag_confidence") or 0.0),
+                "tag_confidence_pct": str(round(float(row.get("tag_confidence") or 0.0) * 100)),
+                "fallback_programs": _fallback_programs(row),
             }
         )
     return rows
@@ -372,10 +386,10 @@ def _asset_table(rows: Iterable[Mapping[str, str]]) -> str:
     body = "\n".join(
         f"""
         <tr>
-          <td><strong>{escape(row['asset'])}</strong><span>{escape(row['mint'])}</span></td>
-          <td>{escape(row['in'])}</td>
-          <td>{escape(row['out'])}</td>
-          <td><mark class="{escape(row['direction'])}">{escape(row['net'])}</mark></td>
+          <td><strong>{escape(row["asset"])}</strong><span>{escape(row["mint"])}</span></td>
+          <td>{escape(row["in"])}</td>
+          <td>{escape(row["out"])}</td>
+          <td><mark class="{escape(row["direction"])}">{escape(row["net"])}</mark></td>
         </tr>
         """
         for row in rows
@@ -397,9 +411,9 @@ def _type_bars(rows: Iterable[Mapping[str, str]]) -> str:
     bars = "\n".join(
         f"""
         <div class="bar-row">
-          <div class="bar-label"><strong>{escape(row['name'])}</strong><span>{escape(row['count'])} tx</span></div>
-          <div class="bar-track"><i style="width: {escape(row['pct'])}%"></i></div>
-          <span class="bar-pct">{escape(row['pct'])}%</span>
+          <div class="bar-label"><strong>{escape(row["name"])}</strong><span>{escape(row["count"])} tx</span></div>
+          <div class="bar-track"><i style="width: {escape(row["pct"])}%"></i></div>
+          <span class="bar-pct">{escape(row["pct"])}%</span>
         </div>
         """
         for row in rows
@@ -414,9 +428,9 @@ def _risk_table(rows: Iterable[Mapping[str, str]]) -> str:
     body = "\n".join(
         f"""
         <tr>
-          <td><mark class="severity {escape(row['severity'].lower())}">{escape(row['severity'])}</mark></td>
-          <td><strong>{escape(row['title'])}</strong><span>{escape(row['detail'])}</span></td>
-          <td>{_signature_link(row['signature'])}</td>
+          <td><mark class="severity {escape(row["severity"].lower())}">{escape(row["severity"])}</mark></td>
+          <td><strong>{escape(row["title"])}</strong><span>{escape(row["detail"])}</span></td>
+          <td>{_signature_link(row["signature"])}</td>
         </tr>
         """
         for row in rows
@@ -440,14 +454,14 @@ def _transactions_table(rows: list[Mapping[str, str]], total: int, max_transacti
     body = "\n".join(
         f"""
         <tr>
-          <td>{escape(row['date'])}</td>
-          <td><mark class="{escape(row['status'])}">{escape(row['status'])}</mark></td>
-          <td><strong>{escape(row['type'])}</strong><span>{escape(row['source'])}</span></td>
-          <td>{escape(row['flow'])}</td>
-          <td>{escape(row['fee'])}</td>
-          <td>{_signature_link(row['signature'])}</td>
+          <td>{escape(row["date"])}</td>
+          <td><mark class="{escape(row["status"])}">{escape(row["status"])}</mark></td>
+          <td><strong>{escape(row["type"])}</strong><span>{escape(row["source"])}</span></td>
+          <td>{escape(row["flow"])}</td>
+          <td>{escape(row["fee"])}</td>
+          <td>{_signature_link(row["signature"])}</td>
         </tr>
-        <tr class="description-row"><td></td><td colspan="5">{escape(row['description'])}</td></tr>
+        <tr class="description-row"><td></td><td colspan="5">{escape(row["description"])}</td></tr>
         """
         for row in rows
     )
