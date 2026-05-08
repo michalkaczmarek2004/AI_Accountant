@@ -157,5 +157,54 @@ class MalformedQuerystringTests(_RouteCase):
         self.assertEqual(resp.status_code, 200)
 
 
+def _tagged_df():
+    row = {col: None for col in DATAFRAME_COLUMNS}
+    row.update(
+        signature="sig-tag-1",
+        timestamp_unix=1_700_000_000,
+        status="succeeded",
+        transaction_type="SWAP",
+        source="JUPITER",
+        fee_sol=__import__("decimal").Decimal("0.000005"),
+        tag_type="Swap",
+        tag_protocol="Jupiter",
+        tag_assets="SOL → USDC",
+        tag_amount_display="0.5 SOL → 100 USDC",
+        tag_usd_estimate=None,
+        tag_confidence=0.95,
+        program_ids=[],
+        net_flow={},
+        token_flow_details=[],
+        movements_in=[],
+        movements_out=[],
+    )
+    return pd.DataFrame([row], columns=DATAFRAME_COLUMNS)
+
+
+class TaggedDashboardRenderTests(_RouteCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.fake.df = _tagged_df()
+
+    def test_wallet_page_renders_tag_type_column(self) -> None:
+        self.client.post("/", data={"address": WALLET})
+        resp = self.client.get(f"/wallet/{WALLET}")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.data.decode()
+        self.assertIn("Swap", html)
+        self.assertIn("Jupiter", html)
+
+    def test_tag_filter_dropdown_present(self) -> None:
+        self.client.post("/", data={"address": WALLET})
+        resp = self.client.get(f"/wallet/{WALLET}")
+        html = resp.data.decode()
+        self.assertIn('name="tag"', html)
+
+    def test_tag_querystring_preserved_in_pagination(self) -> None:
+        self.client.post("/", data={"address": WALLET})
+        resp = self.client.get(f"/wallet/{WALLET}?tag=Swap")
+        self.assertEqual(resp.status_code, 200)
+
+
 if __name__ == "__main__":
     unittest.main()
