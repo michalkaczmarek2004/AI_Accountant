@@ -157,6 +157,30 @@ def _build_assets(
             return nft_sym, _fmt_amount("SOL", abs(Decimal(str(sol_net))))
         return nft_sym, nft_sym
 
+    # Best-effort for Stake/Unstake, LP, Airdrop, Mint/Burn, Bridge, Perpetual Trade
+    if tag_type != "Unknown":
+        # Try to extract assets from flows
+        moving = []
+        sol_net = net_flow.get("SOL")
+        if sol_net is not None:
+            sol_dec = Decimal(str(sol_net))
+            if sol_dec != 0:
+                moving.append(("SOL", abs(sol_dec)))
+        for flow in token_flow_details:
+            if not isinstance(flow, dict):
+                continue
+            net = Decimal(str(flow.get("net", 0)))
+            sym = str(flow.get("symbol") or "Token")
+            if net != 0:
+                moving.append((sym, abs(net)))
+        if moving:
+            assets = " + ".join(s for s, _ in moving)
+            amounts = " + ".join(_fmt_amount(s, a) for s, a in moving)
+            return assets, amounts
+        # Fall back to net_flow_summary from parser
+        if net_flow_summary:
+            return net_flow_summary, net_flow_summary
+
     return "", ""
 
 
@@ -175,20 +199,14 @@ def _layer3_heuristic(
     movements_out: list,
 ) -> tuple[str, float]:
     has_token_out = any(
-        Decimal(str(f.get("net", 0))) < 0
-        for f in token_flow_details
-        if isinstance(f, dict)
+        Decimal(str(f.get("net", 0))) < 0 for f in token_flow_details if isinstance(f, dict)
     )
     has_token_in = any(
-        Decimal(str(f.get("net", 0))) > 0
-        for f in token_flow_details
-        if isinstance(f, dict)
+        Decimal(str(f.get("net", 0))) > 0 for f in token_flow_details if isinstance(f, dict)
     )
     sol_net = Decimal(str(net_flow.get("SOL", 0)))
 
-    if (has_token_out and (has_token_in or sol_net > 0)) or (
-        has_token_in and sol_net < 0
-    ):
+    if (has_token_out and (has_token_in or sol_net > 0)) or (has_token_in and sol_net < 0):
         return "Swap", 0.50
 
     all_movements = list(movements_in) + list(movements_out)
@@ -197,23 +215,21 @@ def _layer3_heuristic(
         for m in all_movements
         if isinstance(m, dict) and m.get("counterparty")
     }
-    nonzero_assets = sum(
-        1 for v in net_flow.values() if Decimal(str(v)) != 0
-    )
+    nonzero_assets = sum(1 for v in net_flow.values() if Decimal(str(v)) != 0)
 
-    # Airdrop: token received, no token/SOL outflow, no identifiable counterparty
-    if has_token_in and sol_net >= 0 and not has_token_out and not counterparties:
-        return "Airdrop", 0.45
-
-    # Transfer: exactly one asset moved and there are actual movements recorded
+    # Transfer: single asset, single counterparty, no swap
     if (
         nonzero_assets >= 1
         and nonzero_assets <= 1
         and len(all_movements) >= 1
-        and len(counterparties) <= 1
+        and len(counterparties) == 1
         and not (has_token_out and has_token_in)
     ):
         return "Transfer", 0.55
+
+    # Airdrop: token received, no token/SOL outflow, no identifiable counterparty
+    if has_token_in and sol_net >= 0 and not has_token_out and not counterparties:
+        return "Airdrop", 0.45
 
     return "Unknown", 0.10
 
@@ -283,8 +299,12 @@ def enrich(
 ) -> pd.DataFrame:
     """Return df with tag columns appended. Input DataFrame is not modified."""
     tag_cols = [
-        "tag_type", "tag_protocol", "tag_assets",
-        "tag_amount_display", "tag_usd_estimate", "tag_confidence",
+        "tag_type",
+        "tag_protocol",
+        "tag_assets",
+        "tag_amount_display",
+        "tag_usd_estimate",
+        "tag_confidence",
     ]
     out = df.copy()
     if df.empty:

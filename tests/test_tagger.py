@@ -77,11 +77,13 @@ class Layer1TypeMappingTests(unittest.TestCase):
         self.assertEqual(r.tag_protocol, "Drift")
 
     def test_type_resolves_protocol_from_layer2_when_source_unknown(self) -> None:
-        r = _tag_row(_row(
-            transaction_type="SWAP",
-            source="UNKNOWN",
-            program_ids=[JUP_PROGRAM],
-        ))
+        r = _tag_row(
+            _row(
+                transaction_type="SWAP",
+                source="UNKNOWN",
+                program_ids=[JUP_PROGRAM],
+            )
+        )
         self.assertEqual(r.tag_type, "Swap")
         self.assertEqual(r.tag_protocol, "Jupiter")
         self.assertAlmostEqual(r.tag_confidence, 0.80)
@@ -110,34 +112,50 @@ class Layer2ProgramIdTests(unittest.TestCase):
 
 class Layer3FlowHeuristicsTests(unittest.TestCase):
     def test_swap_by_flow(self) -> None:
-        r = _tag_row(_row(
-            net_flow={"SOL": Decimal("-0.5"), USDC_MINT: Decimal("100")},
-            token_flow_details=[{
-                "mint": USDC_MINT, "symbol": "USDC",
-                "net": Decimal("100"), "in": Decimal("100"), "out": Decimal("0"),
-            }],
-        ))
+        r = _tag_row(
+            _row(
+                net_flow={"SOL": Decimal("-0.5"), USDC_MINT: Decimal("100")},
+                token_flow_details=[
+                    {
+                        "mint": USDC_MINT,
+                        "symbol": "USDC",
+                        "net": Decimal("100"),
+                        "in": Decimal("100"),
+                        "out": Decimal("0"),
+                    }
+                ],
+            )
+        )
         self.assertEqual(r.tag_type, "Swap")
         self.assertAlmostEqual(r.tag_confidence, 0.50)
 
     def test_transfer_by_flow(self) -> None:
-        r = _tag_row(_row(
-            net_flow={"SOL": Decimal("-0.5")},
-            token_flow_details=[],
-            movements_out=[{"counterparty": "ReceiverXXX", "asset_type": "native"}],
-        ))
+        r = _tag_row(
+            _row(
+                net_flow={"SOL": Decimal("-0.5")},
+                token_flow_details=[],
+                movements_out=[{"counterparty": "ReceiverXXX", "asset_type": "native"}],
+            )
+        )
         self.assertEqual(r.tag_type, "Transfer")
         self.assertAlmostEqual(r.tag_confidence, 0.55)
 
     def test_airdrop_by_flow(self) -> None:
-        r = _tag_row(_row(
-            net_flow={USDC_MINT: Decimal("50")},
-            token_flow_details=[{
-                "mint": USDC_MINT, "symbol": "USDC",
-                "net": Decimal("50"), "in": Decimal("50"), "out": Decimal("0"),
-            }],
-            movements_in=[{"counterparty": None, "asset_type": "token"}],
-        ))
+        r = _tag_row(
+            _row(
+                net_flow={USDC_MINT: Decimal("50")},
+                token_flow_details=[
+                    {
+                        "mint": USDC_MINT,
+                        "symbol": "USDC",
+                        "net": Decimal("50"),
+                        "in": Decimal("50"),
+                        "out": Decimal("0"),
+                    }
+                ],
+                movements_in=[{"counterparty": None, "asset_type": "token"}],
+            )
+        )
         self.assertEqual(r.tag_type, "Airdrop")
         self.assertAlmostEqual(r.tag_confidence, 0.45)
 
@@ -149,43 +167,64 @@ class Layer3FlowHeuristicsTests(unittest.TestCase):
 
 class AssetsDisplayTests(unittest.TestCase):
     def test_swap_sol_to_usdc(self) -> None:
-        r = _tag_row(_row(
-            transaction_type="SWAP",
-            source="JUPITER",
-            net_flow={"SOL": Decimal("-0.5"), USDC_MINT: Decimal("100")},
-            token_flow_details=[{
-                "mint": USDC_MINT, "symbol": "USDC",
-                "net": Decimal("100"), "in": Decimal("100"), "out": Decimal("0"),
-            }],
-        ))
+        r = _tag_row(
+            _row(
+                transaction_type="SWAP",
+                source="JUPITER",
+                net_flow={"SOL": Decimal("-0.5"), USDC_MINT: Decimal("100")},
+                token_flow_details=[
+                    {
+                        "mint": USDC_MINT,
+                        "symbol": "USDC",
+                        "net": Decimal("100"),
+                        "in": Decimal("100"),
+                        "out": Decimal("0"),
+                    }
+                ],
+            )
+        )
         self.assertEqual(r.tag_assets, "SOL → USDC")
         self.assertIn("0.5 SOL", r.tag_amount_display)
         self.assertIn("100 USDC", r.tag_amount_display)
         self.assertIn("→", r.tag_amount_display)
 
     def test_swap_usdc_to_bonk(self) -> None:
-        r = _tag_row(_row(
-            transaction_type="SWAP",
-            source="RAYDIUM",
-            net_flow={USDC_MINT: Decimal("-50"), BONK_MINT: Decimal("1234567")},
-            token_flow_details=[
-                {"mint": USDC_MINT, "symbol": "USDC",
-                 "net": Decimal("-50"), "in": Decimal("0"), "out": Decimal("50")},
-                {"mint": BONK_MINT, "symbol": "BONK",
-                 "net": Decimal("1234567"), "in": Decimal("1234567"), "out": Decimal("0")},
-            ],
-        ))
+        r = _tag_row(
+            _row(
+                transaction_type="SWAP",
+                source="RAYDIUM",
+                net_flow={USDC_MINT: Decimal("-50"), BONK_MINT: Decimal("1234567")},
+                token_flow_details=[
+                    {
+                        "mint": USDC_MINT,
+                        "symbol": "USDC",
+                        "net": Decimal("-50"),
+                        "in": Decimal("0"),
+                        "out": Decimal("50"),
+                    },
+                    {
+                        "mint": BONK_MINT,
+                        "symbol": "BONK",
+                        "net": Decimal("1234567"),
+                        "in": Decimal("1234567"),
+                        "out": Decimal("0"),
+                    },
+                ],
+            )
+        )
         self.assertEqual(r.tag_assets, "USDC → BONK")
         self.assertIn("50 USDC", r.tag_amount_display)
         self.assertIn("1,234,567 BONK", r.tag_amount_display)
 
     def test_transfer_assets(self) -> None:
-        r = _tag_row(_row(
-            transaction_type="TRANSFER",
-            source="SYSTEM_PROGRAM",
-            net_flow={"SOL": Decimal("-0.5")},
-            token_flow_details=[],
-        ))
+        r = _tag_row(
+            _row(
+                transaction_type="TRANSFER",
+                source="SYSTEM_PROGRAM",
+                net_flow={"SOL": Decimal("-0.5")},
+                token_flow_details=[],
+            )
+        )
         self.assertEqual(r.tag_assets, "SOL")
         self.assertIn("0.5 SOL", r.tag_amount_display)
 
