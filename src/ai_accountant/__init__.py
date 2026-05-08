@@ -13,6 +13,7 @@ from .exceptions import (
 )
 from .parser import TransactionParser
 from .report import render_html_report, transaction_export_frame, write_wallet_report
+from .tagger import TagResult, enrich
 
 __all__ = [
     "__version__",
@@ -24,7 +25,9 @@ __all__ = [
     "InvalidSolanaAddressError",
     "SolanaDataFetcher",
     "SolanaDataFetcherError",
+    "TagResult",
     "TransactionParser",
+    "enrich",
     "render_html_report",
     "transaction_export_frame",
     "validate_address",
