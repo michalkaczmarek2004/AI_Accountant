@@ -54,7 +54,11 @@ def to_dataframe(
     transactions: Iterable[Mapping[str, Any]],
 ) -> pd.DataFrame:
     """Parse `transactions` with `parser` and return a DataFrame with the canonical schema."""
+    from .tagger import enrich
+
     rows = parser.parse_many(transactions)
     if not rows:
         return pd.DataFrame(columns=DATAFRAME_COLUMNS)
-    return pd.DataFrame(rows, columns=DATAFRAME_COLUMNS).reset_index(drop=True)
+    df = pd.DataFrame(rows)
+    enriched = enrich(df)
+    return enriched.reindex(columns=DATAFRAME_COLUMNS).reset_index(drop=True)
