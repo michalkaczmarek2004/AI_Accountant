@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from ai_accountant.tagger import TagResult, _tag_row
+from ai_accountant.tagger import TagResult, _tag_row, enrich
 
 USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 BONK_MINT = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6YaB1pPB263rE4ZW"
@@ -245,6 +245,147 @@ class TagResultTypeTests(unittest.TestCase):
         self.assertIsInstance(r.tag_type, str)
         self.assertIsInstance(r.tag_protocol, str)
         self.assertIsInstance(r.tag_confidence, float)
+
+
+class EnrichTests(unittest.TestCase):
+    def _make_row(self, **overrides):
+        base = {
+            "transaction_type": "SWAP",
+            "source": "JUPITER",
+            "program_ids": [],
+            "net_flow": {"SOL": Decimal("-0.5"), BONK_MINT: Decimal("1234567")},
+            "token_flow_details": [{"symbol": "BONK", "net": Decimal("1234567")}],
+            "movements_in": [],
+            "movements_out": [],
+            "net_flow_summary": "0.5 SOL out, 1,234,567 BONK in",
+        }
+        base.update(overrides)
+        return base
+
+    def test_enrich_appends_tag_columns(self) -> None:
+        import pandas as pd
+
+        df = pd.DataFrame([self._make_row()])
+        out = enrich(df)
+        for col in (
+            "tag_type",
+            "tag_protocol",
+            "tag_assets",
+            "tag_amount_display",
+            "tag_usd_estimate",
+            "tag_confidence",
+        ):
+            self.assertIn(col, out.columns, f"missing column: {col}")
+        self.assertEqual(out.iloc[0]["tag_type"], "Swap")
+        self.assertEqual(out.iloc[0]["tag_protocol"], "Jupiter")
+
+    def test_enrich_does_not_mutate_input(self) -> None:
+        import pandas as pd
+
+        df = pd.DataFrame([self._make_row()])
+        original_cols = list(df.columns)
+        enrich(df)
+        self.assertEqual(list(df.columns), original_cols)
+
+    def test_enrich_empty_dataframe_returns_tag_columns(self) -> None:
+        import pandas as pd
+
+        df = pd.DataFrame(columns=["transaction_type", "source", "program_ids"])
+        out = enrich(df)
+        for col in (
+            "tag_type",
+            "tag_protocol",
+            "tag_assets",
+            "tag_amount_display",
+            "tag_usd_estimate",
+            "tag_confidence",
+        ):
+            self.assertIn(col, out.columns)
+        self.assertEqual(len(out), 0)
+
+
+class BestEffortAssetsTests(unittest.TestCase):
+    def test_stake_shows_sol_amount(self) -> None:
+        row = {
+            "transaction_type": "STAKE_SOL",
+            "source": "MARINADE",
+            "program_ids": [],
+            "net_flow": {"SOL": Decimal("-2.5")},
+            "token_flow_details": [],
+            "movements_in": [],
+            "movements_out": [],
+            "net_flow_summary": "2.5 SOL",
+        }
+        result = _tag_row(row)
+        self.assertEqual(result.tag_type, "Stake/Unstake")
+        self.assertEqual(result.tag_assets, "SOL")
+        self.assertIn("2.5", result.tag_amount_display)
+
+    def test_unknown_type_returns_empty_assets(self) -> None:
+        row = {
+            "transaction_type": None,
+            "source": None,
+            "program_ids": [],
+            "net_flow": {},
+            "token_flow_details": [],
+            "movements_in": [],
+            "movements_out": [],
+            "net_flow_summary": "",
+        }
+        result = _tag_row(row)
+        self.assertEqual(result.tag_type, "Unknown")
+        self.assertEqual(result.tag_assets, "")
+        self.assertEqual(result.tag_amount_display, "")
+
+    def test_net_flow_summary_fallback_when_no_flows(self) -> None:
+        row = {
+            "transaction_type": "ADD_LIQUIDITY",
+            "source": "METEORA",
+            "program_ids": [],
+            "net_flow": {},
+            "token_flow_details": [],
+            "movements_in": [],
+            "movements_out": [],
+            "net_flow_summary": "2 USDC + 0.5 SOL",
+        }
+        result = _tag_row(row)
+        self.assertEqual(result.tag_type, "LP Deposit/Withdraw")
+        self.assertEqual(result.tag_assets, "2 USDC + 0.5 SOL")
+        self.assertEqual(result.tag_amount_display, "2 USDC + 0.5 SOL")
+
+
+class NFTAssetsTests(unittest.TestCase):
+    def test_nft_with_sol_shows_sol_amount(self) -> None:
+        row = {
+            "transaction_type": "NFT_SALE",
+            "source": "TENSOR",
+            "program_ids": [],
+            "net_flow": {"SOL": Decimal("10")},
+            "token_flow_details": [{"symbol": "DeGod", "net": Decimal("1")}],
+            "movements_in": [],
+            "movements_out": [],
+            "net_flow_summary": "",
+        }
+        result = _tag_row(row)
+        self.assertEqual(result.tag_type, "NFT Buy/Sell")
+        self.assertEqual(result.tag_assets, "DeGod")
+        self.assertIn("10", result.tag_amount_display)
+        self.assertIn("SOL", result.tag_amount_display)
+
+    def test_nft_without_sol_shows_nft_symbol(self) -> None:
+        row = {
+            "transaction_type": "NFT_SALE",
+            "source": "TENSOR",
+            "program_ids": [],
+            "net_flow": {},  # no SOL key
+            "token_flow_details": [{"symbol": "MyNFT", "net": Decimal("1")}],
+            "movements_in": [],
+            "movements_out": [],
+            "net_flow_summary": "",
+        }
+        result = _tag_row(row)
+        self.assertEqual(result.tag_assets, "MyNFT")
+        self.assertEqual(result.tag_amount_display, "MyNFT")
 
 
 if __name__ == "__main__":

@@ -81,6 +81,8 @@ def _nan_safe(v: Any, default: Any) -> Any:
 
 
 def _fmt_amount(symbol: str, amount: Decimal) -> str:
+    if not amount.is_finite():
+        return f"? {symbol}"
     normalized = amount.normalize()
     rendered = format(normalized, "f")
     if "." in rendered:
@@ -119,15 +121,15 @@ def _build_assets(
                 out_parts.append((sym, abs(net)))
             elif net > 0:
                 in_parts.append((sym, net))
-        if not out_parts or not in_parts:
-            return "", ""
-        assets_out = " + ".join(s for s, _ in out_parts)
-        assets_in = " + ".join(s for s, _ in in_parts)
-        amt_out = " + ".join(_fmt_amount(s, a) for s, a in out_parts)
-        amt_in = " + ".join(_fmt_amount(s, a) for s, a in in_parts)
-        return f"{assets_out} → {assets_in}", f"{amt_out} → {amt_in}"
+        if out_parts and in_parts:
+            assets_out = " + ".join(s for s, _ in out_parts)
+            assets_in = " + ".join(s for s, _ in in_parts)
+            amt_out = " + ".join(_fmt_amount(s, a) for s, a in out_parts)
+            amt_in = " + ".join(_fmt_amount(s, a) for s, a in in_parts)
+            return f"{assets_out} → {assets_in}", f"{amt_out} → {amt_in}"
+        # else fall through to best-effort block below
 
-    if tag_type == "Transfer":
+    elif tag_type == "Transfer":
         candidates: list[tuple[str, Decimal]] = []
         sol_net = net_flow.get("SOL")
         if sol_net is not None:
@@ -141,12 +143,12 @@ def _build_assets(
             sym = str(flow.get("symbol") or "Token")
             if net != 0:
                 candidates.append((sym, abs(net)))
-        if not candidates:
-            return "", ""
-        sym, amt = candidates[0]
-        return sym, _fmt_amount(sym, amt)
+        if candidates:
+            sym, amt = candidates[0]
+            return sym, _fmt_amount(sym, amt)
+        # else fall through to best-effort block below
 
-    if tag_type == "NFT Buy/Sell":
+    elif tag_type == "NFT Buy/Sell":
         nft_sym = "NFT"
         for flow in token_flow_details:
             if isinstance(flow, dict) and flow.get("symbol"):
@@ -157,7 +159,8 @@ def _build_assets(
             return nft_sym, _fmt_amount("SOL", abs(Decimal(str(sol_net))))
         return nft_sym, nft_sym
 
-    # Best-effort for Stake/Unstake, LP, Airdrop, Mint/Burn, Bridge, Perpetual Trade
+    # Best-effort for Stake/Unstake, LP, Airdrop, Mint/Burn, Bridge, Perpetual Trade,
+    # and Swap/Transfer when structured flow data is insufficient.
     if tag_type != "Unknown":
         # Try to extract assets from flows
         moving = []
@@ -215,6 +218,7 @@ def _layer3_heuristic(
         for m in all_movements
         if isinstance(m, dict) and m.get("counterparty")
     }
+    # parser always includes "SOL" key (may be zero); count only non-zero asset values
     nonzero_assets = sum(1 for v in net_flow.values() if Decimal(str(v)) != 0)
 
     # Transfer: single asset, single counterparty, no swap
