@@ -171,5 +171,42 @@ class FilterSpecQuerystringRoundTripTests(unittest.TestCase):
         self.assertEqual(rebuilt.q, spec.q)
 
 
+class FilterSpecTagTypeTests(unittest.TestCase):
+    def test_parses_tag_querystring_key(self) -> None:
+        spec = FilterSpec.from_querystring({"tag": "Swap"})
+        self.assertEqual(spec.tag_type, "Swap")
+
+    def test_empty_tag_yields_none(self) -> None:
+        spec = FilterSpec.from_querystring({"tag": ""})
+        self.assertIsNone(spec.tag_type)
+
+    def test_tag_type_makes_filter_active(self) -> None:
+        spec = FilterSpec.from_querystring({"tag": "Transfer"})
+        self.assertTrue(spec.is_active())
+
+    def test_tag_type_included_in_querystring(self) -> None:
+        spec = FilterSpec.from_querystring({"tag": "Swap"})
+        self.assertIn("tag=Swap", spec.to_querystring())
+
+    def test_apply_tag_type_filter(self) -> None:
+        df = _df_with([
+            {"signature": "a", "tag_type": "Swap"},
+            {"signature": "b", "tag_type": "Transfer"},
+            {"signature": "c", "tag_type": "Swap"},
+        ])
+        spec = FilterSpec.from_querystring({"tag": "Swap"})
+        out = spec.apply(df)
+        self.assertEqual(sorted(out["signature"].tolist()), ["a", "c"])
+
+    def test_apply_tag_type_case_insensitive(self) -> None:
+        df = _df_with([
+            {"signature": "a", "tag_type": "Swap"},
+            {"signature": "b", "tag_type": "Transfer"},
+        ])
+        spec = FilterSpec.from_querystring({"tag": "swap"})
+        out = spec.apply(df)
+        self.assertEqual(out["signature"].tolist(), ["a"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -22,6 +22,7 @@ class FilterSpec:
     status: str | None = None
     source: str | None = None
     q: str | None = None
+    tag_type: str | None = None
     page: int = 1
 
     @classmethod
@@ -48,6 +49,7 @@ class FilterSpec:
             status=status,
             source=get("source"),
             q=get("q"),
+            tag_type=get("tag"),
             page=page,
         )
 
@@ -62,6 +64,7 @@ class FilterSpec:
                 self.status,
                 self.source,
                 self.q,
+                self.tag_type,
             )
         )
 
@@ -81,6 +84,8 @@ class FilterSpec:
             out.append(("source", self.source))
         if self.q:
             out.append(("q", self.q))
+        if self.tag_type:
+            out.append(("tag", self.tag_type))
         if self.page > 1:
             out.append(("page", str(self.page)))
         return urlencode(out)
@@ -108,6 +113,9 @@ class FilterSpec:
         if self.q is not None:
             needle = self.q.casefold()
             mask &= df.apply(lambda row: _row_matches_q(row, needle), axis=1)
+        if self.tag_type is not None and "tag_type" in df.columns:
+            needle = self.tag_type.casefold()
+            mask &= df["tag_type"].fillna("").str.casefold() == needle
         return df[mask].reset_index(drop=True)
 
 
