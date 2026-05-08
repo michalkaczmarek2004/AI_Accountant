@@ -156,45 +156,51 @@
 <section class="report-section">
   <h2>Transactions</h2>
   {% if transactions %}
-  <table>
-    <thead>
-      <tr>
-        <th>Date</th><th>Status</th><th>Type</th>
-        <th>Assets</th><th>Amount</th><th>Fee</th>
-        <th>Confidence</th><th>Tx</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for r, exp in transactions %}
-      <tr>
-        <td>{{ r.date }}</td>
-        <td><mark class="{{ r.status }}">{{ r.status }}</mark></td>
-        <td>
-          <strong>{{ r.tag_type }}</strong>
-          <span class="muted">{{ r.tag_protocol }}</span>
-        </td>
-        <td>
-          {% if r.tag_assets %}
-            {{ r.tag_assets }}
-          {% elif r.fallback_programs %}
-            <span class="muted">{{ r.fallback_programs }}</span>
-          {% endif %}
-        </td>
-        <td>
-          {{ r.tag_amount_display }}
-          {% if r.tag_usd_estimate %}<span class="muted">{{ r.tag_usd_estimate }}</span>{% endif %}
-        </td>
-        <td>{{ r.fee }}</td>
-        <td>
-          {% set conf = r.tag_confidence_pct | int %}
+  <div class="tx-list">
+    <div class="tx-list-header">
+      <span>Date</span>
+      <span>Event</span>
+      <span>Change</span>
+      <span>Status</span>
+      <span>Review</span>
+      <span>Confidence</span>
+    </div>
+    {% for r, exp in transactions %}
+    <details class="tx-row">
+      <summary class="tx-summary">
+        <span>{{ r.date }}</span>
+        <span><strong>{{ exp.event_title }}</strong></span>
+        <span>{{ r.tag_assets or r.tag_amount_display or '—' }}</span>
+        <span><mark class="{{ r.status }}">{{ r.status }}</mark></span>
+        <span>{{ exp.review_label }}</span>
+        <span>
+          {% set conf = exp.confidence_percent %}
           <mark class="confidence {% if conf >= 80 %}high{% elif conf >= 50 %}medium{% else %}low{% endif %}">{{ conf }}%</mark>
-        </td>
-        <td><a href="{{ url_for('tx_detail_route', address=address, sig=r.signature) }}">{{ r.signature_short }}</a></td>
-      </tr>
-      <tr class="description-row"><td></td><td colspan="7" class="muted">{{ r.description }}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+        </span>
+      </summary>
+      <div class="tx-expanded">
+        <p>{{ exp.short_explanation }}</p>
+        {% if exp.known_facts %}
+        <h4>Known</h4>
+        <ul>{% for f in exp.known_facts %}<li>{{ f }}</li>{% endfor %}</ul>
+        {% endif %}
+        {% if exp.unknown_facts %}
+        <h4>Unknown</h4>
+        <ul>{% for f in exp.unknown_facts %}<li>{{ f }}</li>{% endfor %}</ul>
+        {% endif %}
+        {% if exp.suggested_actions %}
+        <h4>Suggested actions</h4>
+        <ul>{% for a in exp.suggested_actions %}<li>{{ a }}</li>{% endfor %}</ul>
+        {% endif %}
+        {% if exp.expanded_explanation %}
+        <p class="muted">{{ exp.expanded_explanation }}</p>
+        {% endif %}
+        <div class="tx-technical"><code>{{ exp.technical_summary }}</code></div>
+        <p><a href="{{ url_for('tx_detail_route', address=address, sig=r.signature) }}" class="muted">View raw details →</a></p>
+      </div>
+    </details>
+    {% endfor %}
+  </div>
   <nav class="pagination">
     Page {{ transactions_page }} of {{ transactions_pages }}
     {% if transactions_page > 1 %}<a href="?{{ filter.to_querystring() }}{% if filter.to_querystring() %}&{% endif %}page={{ transactions_page - 1 }}">Prev</a>{% endif %}
