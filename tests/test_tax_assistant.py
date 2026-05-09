@@ -14,7 +14,10 @@ from ai_accountant.tax_assistant import (
     LARGE_FLOW_THRESHOLD,
     REVIEW_REQUIRED_CATEGORIES,
     TAXABLE_CATEGORIES,
+    _fmt,
+    _review_count,
     _review_tier,
+    _row_date,
     tax_category,
 )
 
@@ -143,6 +146,45 @@ class ReviewTierTests(unittest.TestCase):
             tag_protocol="Unknown",
         )
         self.assertEqual(_review_tier(row, "Income"), 7)
+
+
+class UtilityHelperTests(unittest.TestCase):
+    def test_review_count_counts_qualifying_rows(self):
+        rows = [
+            _row(tag_type="Swap"),          # tier 2 → qualifies
+            _row(tag_type="Airdrop"),        # tier 3 → qualifies
+            _row(tag_type="Transfer", native_net_sol=Decimal("0.1")),  # no tier → doesn't qualify
+        ]
+        df = pd.DataFrame(rows)
+        self.assertEqual(_review_count(df), 2)
+
+    def test_review_count_empty_df_returns_zero(self):
+        from ai_accountant import DATAFRAME_COLUMNS
+        df = pd.DataFrame(columns=DATAFRAME_COLUMNS)
+        self.assertEqual(_review_count(df), 0)
+
+    def test_row_date_valid_timestamp(self):
+        row = _row(timestamp_unix=1735689600)
+        self.assertEqual(_row_date(row), "2025-01-01")
+
+    def test_row_date_none_returns_unknown(self):
+        row = _row(timestamp_unix=None)
+        self.assertEqual(_row_date(row), "Unknown")
+
+    def test_fmt_strips_trailing_zeros(self):
+        self.assertEqual(_fmt(Decimal("1.500")), "1.5")
+
+    def test_fmt_zero_returns_zero(self):
+        self.assertEqual(_fmt(Decimal("0")), "0")
+
+    def test_fmt_signed_positive(self):
+        self.assertEqual(_fmt(Decimal("1.5"), signed=True), "+1.5")
+
+    def test_fmt_signed_zero(self):
+        self.assertEqual(_fmt(Decimal("0"), signed=True), "+0")
+
+    def test_fmt_signed_negative(self):
+        self.assertEqual(_fmt(Decimal("-1.5"), signed=True), "-1.5")
 
 
 if __name__ == "__main__":
