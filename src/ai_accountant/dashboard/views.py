@@ -257,4 +257,56 @@ def _stringify(value: Any) -> str:
     return str(value)
 
 
-__all__ = ["wallet_page", "transaction_detail", "PAGE_SIZE"]
+def tax_page(
+    df: pd.DataFrame,
+    *,
+    address: str,
+    meta: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Build template context for the Tax Assistant page."""
+    from ..tax_assistant import (
+        tax_classification_rows,
+        tax_review_queue,
+        tax_summary,
+        yearly_summary,
+    )
+
+    no_data = df.empty or not (df["status"] == "succeeded").any()
+
+    if no_data:
+        return {
+            "address": address,
+            "address_short": _short(address, 4),
+            "meta": meta,
+            "summary": None,
+            "classification": [],
+            "review_queue": [],
+            "yearly": [],
+            "no_data": True,
+        }
+
+    raw = tax_summary(df, address)
+    net_positive = raw["net_sol"] >= Decimal("0")
+    summary = {
+        "total_income_sol": f"+{_format_decimal(raw['total_income_sol'])} SOL",
+        "total_expense_sol": f"-{_format_decimal(raw['total_expense_sol'])} SOL",
+        "total_fees_sol": f"{_format_decimal(raw['total_fees_sol'])} SOL",
+        "net_sol": f"{_format_decimal(raw['net_sol'], signed=True)} SOL",
+        "net_positive": net_positive,
+        "taxable_count": str(raw["taxable_count"]),
+        "review_count": str(raw["review_count"]),
+    }
+
+    return {
+        "address": address,
+        "address_short": _short(address, 4),
+        "meta": meta,
+        "summary": summary,
+        "classification": tax_classification_rows(df),
+        "review_queue": tax_review_queue(df),
+        "yearly": yearly_summary(df),
+        "no_data": False,
+    }
+
+
+__all__ = ["wallet_page", "transaction_detail", "tax_page", "PAGE_SIZE"]
