@@ -11,13 +11,36 @@
     {% endif %}
   </div>
   <div class="header-actions">
-    <a href="{{ url_for('wallet_page_route', address=address) }}" class="link-button">← Back to wallet</a>
+    <a href="{{ url_for('wallet_page_route', address=address) }}" class="button secondary">Back to wallet</a>
   </div>
 </section>
 
 <div class="tax-disclaimer">
   This is not financial or tax advice. Always consult a qualified tax professional.
 </div>
+
+<section class="tax-settings">
+  <form method="get" action="{{ url_for('tax_country_page_route', address=address) }}">
+    <label>Tax country
+      <select name="tax_country">
+        {% for country in tax_country_options %}
+        <option value="{{ country.code }}" {% if country.code == tax_country %}selected{% endif %}>{{ country.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Apply</button>
+  </form>
+  <div>
+    <strong>{{ tax_country_profile.label }} notes</strong>
+    <p class="muted">{{ tax_country_profile.summary }}</p>
+    <p class="muted">
+      Sources:
+      {% for source in tax_country_profile.sources %}
+      <a href="{{ source.url }}" target="_blank" rel="noreferrer">{{ source.label }}</a>{% if not loop.last %}, {% endif %}
+      {% endfor %}
+    </p>
+  </div>
+</section>
 
 {% if no_data %}
 <section class="empty-cache">
@@ -27,22 +50,77 @@
 {% else %}
 
 <section class="kpi-grid tax-kpi-grid">
-  <article class="kpi"><span>Income</span><strong class="positive">{{ summary.total_income_sol }}</strong></article>
-  <article class="kpi"><span>Expense</span><strong>{{ summary.total_expense_sol }}</strong></article>
-  <article class="kpi"><span>Fees paid</span><strong>{{ summary.total_fees_sol }}</strong></article>
-  <article class="kpi"><span>Net change</span><strong class="{{ 'positive' if summary.net_positive else 'negative' }}">{{ summary.net_sol }}</strong></article>
-  <article class="kpi"><span>Potentially taxable events</span><strong>{{ summary.taxable_count }}</strong></article>
-  <article class="kpi"><span>Review needed</span><strong>{{ summary.review_count }}</strong></article>
+  <article class="kpi kpi-income">
+    <span>Income</span><strong class="positive">{{ summary.total_income_sol }}</strong>
+    <small>Incoming values that may require classification.</small>
+  </article>
+  <article class="kpi kpi-expense">
+    <span>Expense</span><strong>{{ summary.total_expense_sol }}</strong>
+    <small>Outgoing SOL/assets treated as expense or outflow.</small>
+  </article>
+  <article class="kpi kpi-fee">
+    <span>Fees paid</span><strong>{{ summary.total_fees_sol }}</strong>
+    <small>Network fees paid by this wallet.</small>
+  </article>
+  <article class="kpi kpi-net">
+    <span>Net change</span><strong class="{{ 'positive' if summary.net_positive else 'negative' }}">{{ summary.net_sol }}</strong>
+    <small>Income minus expenses in SOL.</small>
+  </article>
+  <article class="kpi kpi-info">
+    <span>Potentially taxable events</span><strong>{{ summary.taxable_count }}</strong>
+    <small>Events likely relevant but not final tax conclusions.</small>
+  </article>
+  <article class="kpi kpi-review">
+    <span>Review needed</span><strong>{{ summary.review_count }}</strong>
+    <small>Transactions that need manual review or classification.</small>
+  </article>
+</section>
+
+<section class="report-section tax-ack-scope" data-ack-scope="tax-deadlines">
+  <details class="tax-deadlines-panel">
+    <summary>
+      <div>
+        <h2>Tax Deadlines</h2>
+        <p class="muted">Federal IRS deadlines for {{ tax_country_profile.label }}. Completed items move to the end of the list and stay confirmed on this device.</p>
+      </div>
+      <mark class="medium"><span data-ack-count>{{ tax_deadlines|length }}</span> active</mark>
+    </summary>
+  <p class="muted">The dashboard warns when a deadline is within {{ tax_country_profile.deadline_warning_days }} days or already passed.</p>
+  {% if tax_deadlines %}
+  <div class="deadline-list">
+    {% for deadline in tax_deadlines %}
+    <article class="deadline-row {{ deadline.status }}" data-ack-item data-ack-kind="deadline" data-ack-id="{{ deadline.ack_id }}">
+      <div>
+        <strong>{{ deadline.label }}</strong>
+        <span class="muted">{{ deadline.action }}</span>
+        <span class="muted">{{ deadline.note }}</span>
+      </div>
+      <div>
+        <mark data-ack-status class="{{ 'high' if deadline.status == 'overdue' else ('medium' if deadline.status == 'due-soon' else 'neutral') }}">{{ deadline.status_label }}</mark>
+        <strong>{{ deadline.due_display }}</strong>
+        <a href="{{ deadline.source_url }}" target="_blank" rel="noreferrer" class="muted">{{ deadline.source_label }}</a>
+        <button type="button" class="ack-button" data-ack-button data-ack-id="{{ deadline.ack_id }}">{{ deadline.confirm_label }}</button>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  <p class="empty ack-empty" hidden>All deadline reminders are confirmed on this device.</p>
+  {% else %}
+  <p class="empty">No deadline profile is available for this country yet.</p>
+  {% endif %}
+  </details>
 </section>
 
 <section class="report-section">
   <h2>Tax Classification</h2>
+  <p class="muted">This groups transactions by likely accounting/tax treatment based on parsed wallet activity.</p>
+  <p class="muted">Review? means the group may need manual classification before you rely on it for tax/accounting totals.</p>
   {% if classification %}
   <table>
     <thead>
       <tr>
         <th>Category</th>
-        <th>Source case</th>
+        <th>Detected pattern</th>
         <th>Count</th>
         <th>SOL net</th>
         <th>Review?</th>
@@ -51,11 +129,11 @@
     <tbody>
       {% for r in classification %}
       <tr>
-        <td><strong>{{ r.category }}</strong></td>
-        <td><code class="muted">{{ r.case_keys | join(", ") }}</code></td>
+        <td><strong>{{ r.category_label }}</strong></td>
+        <td><span class="muted">{{ r.case_labels | join(", ") }}</span></td>
         <td>{{ r.count }}</td>
         <td>{{ r.sol_net }}</td>
-        <td>{% if r.flagged %}<mark class="medium">⚠ review</mark>{% endif %}</td>
+        <td>{% if r.flagged %}<mark class="medium">Review</mark>{% else %}<span class="muted">Usually no queue</span>{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -69,7 +147,7 @@
   <h2>Review Queue</h2>
   {% if review_queue %}
   <div class="tx-list">
-    <div class="tx-list-header" style="grid-template-columns: 100px 1fr 1fr 90px 1fr;">
+    <div class="tx-list-header tax-review-grid">
       <span>Date</span>
       <span>Category</span>
       <span>Change</span>
@@ -78,32 +156,53 @@
     </div>
     {% for item in review_queue %}
     <details class="tx-row">
-      <summary class="tx-summary" style="grid-template-columns: 100px 1fr 1fr 90px 1fr;">
+      <summary class="tx-summary tax-review-grid">
         <span>{{ item.date }}</span>
-        <span><mark class="neutral review-tier">{{ item.category }}</mark></span>
+        <span><mark class="neutral review-tier">{{ item.category_label }}</mark></span>
         <span>{{ item.sol_net }}</span>
         <span><mark class="{{ item.status }}">{{ item.status }}</mark></span>
-        <span>{{ item.review_label }}</span>
+        <span>{{ item.review_reason }}</span>
       </summary>
       <div class="tx-expanded">
-        <p>{{ item.short_explanation }}</p>
-        {% if item.known_facts %}
-        <h4>Known</h4>
-        <ul>{% for f in item.known_facts %}<li>{{ f }}</li>{% endfor %}</ul>
+        <h4>Why this needs review</h4>
+        <p>{{ item.review_reason }}</p>
+        <p class="muted">{{ item.short_explanation }}</p>
+        {% if item.evidence %}
+        <h4>What we know</h4>
+        <ul>{% for f in item.evidence %}<li>{{ f }}</li>{% endfor %}</ul>
         {% endif %}
-        {% if item.unknown_facts %}
-        <h4>Missing information</h4>
-        <ul>{% for f in item.unknown_facts %}<li>{{ f }}</li>{% endfor %}</ul>
+        {% if item.missing_information %}
+        <h4>What is missing</h4>
+        <ul>{% for f in item.missing_information %}<li>{{ f }}</li>{% endfor %}</ul>
         {% endif %}
-        {% if item.suggested_actions %}
-        <h4>Suggested actions</h4>
-        <ul>{% for a in item.suggested_actions %}<li>{{ a }}</li>{% endfor %}</ul>
+        <h4>Suggested next step</h4>
+        <p>{{ item.suggested_tax_action }}</p>
+        {% if item.transaction_warning %}
+        <div class="tax-alert {{ item.transaction_warning.level }}" data-ack-item data-ack-id="{{ item.transaction_warning.ack_id }}">
+          <strong>{{ item.transaction_warning.title }}</strong>
+          <p>{{ item.transaction_warning.message }}</p>
+          <button type="button" class="ack-button" data-ack-button data-ack-id="{{ item.transaction_warning.ack_id }}">Mark reviewed</button>
+        </div>
         {% endif %}
-        {% if item.expanded_explanation %}
-        <p class="muted">{{ item.expanded_explanation }}</p>
+        <h4>Likely {{ item.tax_country_label }} tax treatment</h4>
+        <p>{{ item.tax_treatment }}</p>
+        <p><strong>Possible tax:</strong> {{ item.tax_due }}</p>
+        <p><strong>How to calculate:</strong> {{ item.tax_calculation }}</p>
+        <p><strong>Forms to discuss:</strong> {{ item.tax_forms }}</p>
+        <p><strong>Rate note:</strong> {{ item.tax_rate_note }}</p>
+        {% if item.tax_deadline_notice %}
+        <h4>Deadline reminder</h4>
+        <div class="tax-alert {{ item.tax_deadline_notice.status }}" data-ack-item data-ack-id="{{ item.tax_deadline_notice.ack_id }}">
+          <strong>{{ item.tax_deadline_notice.status_label }} · {{ item.tax_deadline_notice.due_display }}</strong>
+          <p>{{ item.tax_deadline_notice.label }}. {{ item.tax_deadline_notice.action }}</p>
+          <p>{{ item.tax_deadline_notice.note }}</p>
+          <button type="button" class="ack-button" data-ack-button data-ack-id="{{ item.tax_deadline_notice.ack_id }}">{{ item.tax_deadline_notice.confirm_label }}</button>
+        </div>
         {% endif %}
-        <div class="tx-technical"><code>Tier {{ item.tier }} · {{ item.source or "unknown source" }}</code></div>
-        <p><a href="{{ url_for('tx_detail_route', address=address, sig=item.signature) }}" class="muted">View raw transaction →</a></p>
+        <h4>Tax/accounting note</h4>
+        <p>{{ item.tax_accounting_note }}</p>
+        <div class="tx-technical"><code>Tier {{ item.tier }} · Rule {{ item.rule_id }} · Detected pattern: {{ item.detected_pattern }}</code></div>
+        <p><a href="{{ url_for('tx_detail_route', address=address, sig=item.signature) }}">View raw transaction</a></p>
       </div>
     </details>
     {% endfor %}
@@ -143,15 +242,25 @@
   {% endif %}
 </section>
 
-<section class="export-bar">
-  <a href="{{ url_for('tax_export_csv_route', address=address) }}">Download Tax CSV</a>
-  <a href="{{ url_for('tax_export_json_route', address=address) }}">Download Accountant JSON</a>
-  <a href="{{ url_for('tax_summary_csv_route', address=address) }}">Download Yearly Summary CSV</a>
+<section class="export-panel">
+  <div>
+    <p class="eyebrow">Export</p>
+    <h2>Tax-ready report</h2>
+    <p class="muted">PDF is the primary handoff format. CSV and JSON remain available for accountants, reconciliation and developer workflows.</p>
+  </div>
+  <div class="export-actions">
+    <a class="button primary export-primary" href="{{ url_for('export_pdf_route', address=address) }}?tax_country={{ tax_country }}">Download PDF Report</a>
+  </div>
+  <div class="export-secondary">
+    <a href="{{ url_for('tax_export_csv_route', address=address) }}">Download Tax CSV</a>
+    <a href="{{ url_for('tax_summary_csv_route', address=address) }}">Download Yearly Summary CSV</a>
+    <a href="{{ url_for('tax_export_json_route', address=address) }}">Export developer JSON</a>
+  </div>
 </section>
 
 {% endif %}
 
-<div class="tax-disclaimer" style="margin-top: 16px;">
+<div class="tax-disclaimer tax-disclaimer-bottom">
   This is not financial or tax advice. Always consult a qualified tax professional.
 </div>
 

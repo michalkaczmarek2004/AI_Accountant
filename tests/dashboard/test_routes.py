@@ -9,6 +9,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from ai_accountant import DATAFRAME_COLUMNS, HeliusAuthenticationError, HeliusRateLimitError
+from ai_accountant.dashboard.demo import DEMO_DATASET_LABEL, DEMO_WALLET_ADDRESS
 from ai_accountant.dashboard.server import create_app
 
 WALLET = "86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY"
@@ -71,6 +72,45 @@ class LandingRouteTests(_RouteCase):
         self.assertEqual(resp.status_code, 303)
         self.assertIn(WALLET, resp.headers["Location"])
         self.assertEqual(self.fake.calls, 1)
+
+    def test_demo_route_seeds_cache_and_redirects(self) -> None:
+        resp = self.client.post("/demo")
+        self.assertEqual(resp.status_code, 303)
+        self.assertIn(DEMO_WALLET_ADDRESS, resp.headers["Location"])
+        self.assertTrue((self.tmp / DEMO_WALLET_ADDRESS / "transactions.pkl").exists())
+        wallet_resp = self.client.get(f"/wallet/{DEMO_WALLET_ADDRESS}")
+        self.assertEqual(wallet_resp.status_code, 200)
+        self.assertIn(DEMO_DATASET_LABEL.encode(), wallet_resp.data)
+        self.assertIn(b"/tax-country?tax_country=US", wallet_resp.data)
+        self.assertIn(b"ai-chart-line", wallet_resp.data)
+        self.assertIn(b"ai-chart-bar", wallet_resp.data)
+        self.assertIn(b"23.1%", wallet_resp.data)
+        self.assertIn(b"7.7%", wallet_resp.data)
+        self.assertNotIn(b"7.692307692307", wallet_resp.data)
+        self.assertNotIn(b"Pages:", wallet_resp.data)
+
+        tax_resp = self.client.get(f"/wallet/{DEMO_WALLET_ADDRESS}/tax")
+        self.assertEqual(tax_resp.status_code, 200)
+        self.assertIn(b"Tax country", tax_resp.data)
+        self.assertIn(b"United States notes", tax_resp.data)
+        self.assertIn(b"IRS digital assets guidance", tax_resp.data)
+        self.assertIn(b"Tax Deadlines", tax_resp.data)
+        self.assertIn(b'data-ack-scope="tax-deadlines"', tax_resp.data)
+        self.assertIn(b'data-ack-kind="deadline"', tax_resp.data)
+        self.assertIn(b"Mark as done", tax_resp.data)
+        self.assertNotIn(b"Show confirmed items again", tax_resp.data)
+        self.assertIn(b"IRS Publication 505", tax_resp.data)
+        self.assertIn(b"Likely United States tax treatment", tax_resp.data)
+        self.assertIn(b"Possible tax:", tax_resp.data)
+        self.assertIn(b"How to calculate:", tax_resp.data)
+        self.assertIn(b"Form 8949", tax_resp.data)
+        self.assertIn(b"Deadline reminder", tax_resp.data)
+        self.assertIn(b"Fee-only unknown program interaction", tax_resp.data)
+        self.assertIn(b"Mark reviewed", tax_resp.data)
+        self.assertIn(b"Why this needs review", tax_resp.data)
+        self.assertIn(b"Suggested next step", tax_resp.data)
+        self.assertIn(b"Tax/accounting note", tax_resp.data)
+        self.assertNotIn(b"No action needed", tax_resp.data)
 
 
 class WalletRouteTests(_RouteCase):
@@ -136,6 +176,13 @@ class ExportRouteTests(_RouteCase):
         resp = self.client.get(f"/wallet/{WALLET}/export.json")
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp.mimetype.startswith("application/json"))
+
+    def test_export_pdf_returns_200_with_pdf_mimetype(self) -> None:
+        self.client.post("/", data={"address": WALLET})
+        resp = self.client.get(f"/wallet/{WALLET}/report.pdf")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.mimetype.startswith("application/pdf"))
+        self.assertTrue(resp.data.startswith(b"%PDF-"))
 
     def test_empty_filter_export_returns_200_not_404(self) -> None:
         self.client.post("/", data={"address": WALLET})
@@ -216,6 +263,11 @@ class TaxRouteTests(_RouteCase):
         resp = self.client.get(f"/wallet/{WALLET}/tax")
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp.content_type.startswith("text/html"))
+
+    def test_tax_country_page_returns_200(self) -> None:
+        resp = self.client.get(f"/wallet/{WALLET}/tax-country?tax_country=US")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"United States notes", resp.data)
 
     def test_tax_page_contains_disclaimer(self) -> None:
         resp = self.client.get(f"/wallet/{WALLET}/tax")

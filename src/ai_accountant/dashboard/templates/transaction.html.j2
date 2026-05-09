@@ -1,9 +1,9 @@
 {% extends "base.html.j2" %}
 {% block title %}Transaction {{ signature_short }} — AI Accountant{% endblock %}
 {% block body %}
-<p><a href="{{ url_for('wallet_page_route', address=address) }}">← Back to wallet {{ address_short }}</a></p>
-
 <section class="tx-header">
+  <p><a href="{{ url_for('wallet_page_route', address=address) }}">Back to wallet {{ address_short }}</a></p>
+  <p class="eyebrow">Transaction detail</p>
   <h1>Transaction {{ signature_short }}</h1>
   <p class="muted">{{ timestamp_iso }}</p>
   <p>
@@ -11,8 +11,12 @@
     <mark class="neutral">{{ transaction_type }}</mark>
     <mark class="neutral">{{ source }}</mark>
   </p>
-  <p>Signature: <code>{{ signature }}</code> · <a href="{{ explorer_url }}" target="_blank" rel="noreferrer">view on explorer</a></p>
-  <p>Fee: {{ fee_sol }} SOL ({% if fee_paid_by_wallet %}paid by wallet{% else %}paid by another account{% endif %})</p>
+  <dl class="tx-meta-grid">
+    <dt>Signature</dt>
+    <dd><code>{{ signature }}</code> <a href="{{ explorer_url }}" target="_blank" rel="noreferrer">View on explorer</a></dd>
+    <dt>Fee</dt>
+    <dd>{{ fee_sol }} SOL ({% if fee_paid_by_wallet %}paid by wallet{% else %}paid by another account{% endif %})</dd>
+  </dl>
 </section>
 
 <section class="report-section">

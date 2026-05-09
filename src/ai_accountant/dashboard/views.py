@@ -45,9 +45,9 @@ def wallet_page(
     page_slice = sorted_filtered.iloc[start : start + PAGE_SIZE]
 
     kpis = _wallet_metrics(filtered, address, generated_at=datetime.now(timezone.utc))
-    asset_flow = _asset_flow_rows(filtered)
+    asset_flow = _decorate_asset_flow(_asset_flow_rows(filtered))
     mix = _transaction_type_rows(filtered)
-    risk = _risk_rows(filtered)
+    risk = _decorate_review_rows(_risk_rows(filtered))
     tx_rows = _transaction_rows(page_slice, limit=PAGE_SIZE)
     tx_explanations = [explain_row(row) for _, row in page_slice.iterrows()]
 
@@ -257,27 +257,59 @@ def _stringify(value: Any) -> str:
     return str(value)
 
 
+def _decorate_asset_flow(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    decorated: list[dict[str, str]] = []
+    for row in rows:
+        copied = dict(row)
+        mint = copied.get("mint") or ""
+        copied["mint_short"] = _short(mint, 8) if mint else ""
+        decorated.append(copied)
+    return decorated
+
+
+def _decorate_review_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    decorated: list[dict[str, str]] = []
+    for row in rows:
+        copied = dict(row)
+        signature = copied.get("signature") or ""
+        copied["signature_short"] = _short(signature, 8) if signature else ""
+        decorated.append(copied)
+    return decorated
+
+
 def tax_page(
     df: pd.DataFrame,
     *,
     address: str,
     meta: dict[str, Any] | None,
+    tax_country: str | None = None,
 ) -> dict[str, Any]:
     """Build template context for the Tax Assistant page."""
     from ..tax_assistant import (
+        normalize_tax_country,
         tax_classification_rows,
+        tax_country_options,
+        tax_country_profile,
+        tax_deadline_rows,
         tax_review_queue,
         tax_summary,
         yearly_summary,
     )
 
+    selected_country = normalize_tax_country(tax_country)
+    selected_profile = tax_country_profile(selected_country)
     no_data = df.empty or not (df["status"] == "succeeded").any()
+    tax_years = _tax_years(df)
 
     if no_data:
         return {
             "address": address,
             "address_short": _short(address, 4),
             "meta": meta,
+            "tax_country": selected_country,
+            "tax_country_profile": selected_profile,
+            "tax_country_options": tax_country_options(),
+            "tax_deadlines": tax_deadline_rows(selected_country, tax_years),
             "summary": None,
             "classification": [],
             "review_queue": [],
@@ -301,12 +333,31 @@ def tax_page(
         "address": address,
         "address_short": _short(address, 4),
         "meta": meta,
+        "tax_country": selected_country,
+        "tax_country_profile": selected_profile,
+        "tax_country_options": tax_country_options(),
+        "tax_deadlines": tax_deadline_rows(selected_country, tax_years),
         "summary": summary,
         "classification": tax_classification_rows(df),
-        "review_queue": tax_review_queue(df),
+        "review_queue": tax_review_queue(df, country=selected_country),
         "yearly": yearly_summary(df),
         "no_data": False,
     }
+
+
+def _tax_years(df: pd.DataFrame) -> list[int]:
+    current_year = datetime.now(timezone.utc).year
+    if df.empty or "timestamp_unix" not in df.columns:
+        return [current_year - 1, current_year]
+    years: set[int] = {current_year - 1, current_year}
+    for ts in df["timestamp_unix"]:
+        if ts is None:
+            continue
+        try:
+            years.add(datetime.fromtimestamp(int(ts), timezone.utc).year)
+        except (OSError, TypeError, ValueError):
+            continue
+    return sorted(years)
 
 
 __all__ = ["wallet_page", "transaction_detail", "tax_page", "PAGE_SIZE"]

@@ -232,13 +232,57 @@ def _asset_flow_rows(frame: pd.DataFrame) -> list[dict[str, str]]:
 def _transaction_type_rows(frame: pd.DataFrame) -> list[dict[str, str]]:
     if frame.empty:
         return []
-    counts = Counter(str(v or "Unknown") for v in frame.get("transaction_type", []))
+    counts = Counter(_human_transaction_type(v) for v in frame.get("transaction_type", []))
     total = sum(counts.values()) or 1
     rows = []
     for name, count in counts.most_common():
         pct = (Decimal(count) / Decimal(total)) * Decimal("100")
-        rows.append({"name": name, "count": str(count), "pct": _format_decimal(pct)})
+        pct_display = _format_percentage(pct)
+        rows.append({
+            "name": name,
+            "count": str(count),
+            "pct": pct_display,
+            "pct_width": _format_percentage(_clamp_decimal(pct, Decimal("0"), Decimal("100"))),
+        })
     return rows
+
+
+def _human_transaction_type(value: Any) -> str:
+    raw = str(value or "Unknown").strip() or "Unknown"
+    key = raw.upper().replace(" ", "_")
+    labels = {
+        "TRANSFER": "Transfer",
+        "TOKEN_TRANSFER": "Token transfer",
+        "SWAP": "Swap",
+        "NFT_SALE": "NFT sale",
+        "NFT_BUY": "NFT buy",
+        "NFT_BUY_SELL": "NFT trade",
+        "AIRDROP": "Airdrop",
+        "STAKE": "Stake",
+        "UNSTAKE": "Unstake",
+        "LP": "Liquidity pool",
+        "LP_DEPOSIT": "Liquidity pool deposit",
+        "LP_WITHDRAW": "Liquidity pool withdrawal",
+        "PERP": "Perpetual trade",
+        "PERPETUAL_TRADE": "Perpetual trade",
+        "BRIDGE": "Bridge",
+        "UNKNOWN": "Unknown",
+    }
+    if key in labels:
+        return labels[key]
+    return key.replace("_", " ").strip().title() or "Unknown"
+
+
+def _format_percentage(value: Decimal) -> str:
+    pct = _clamp_decimal(value, Decimal("0"), Decimal("100"))
+    rendered = f"{pct.quantize(Decimal('0.1')):f}"
+    if rendered.endswith(".0"):
+        rendered = rendered[:-2]
+    return rendered
+
+
+def _clamp_decimal(value: Decimal, low: Decimal, high: Decimal) -> Decimal:
+    return max(low, min(high, value))
 
 
 def _risk_rows(frame: pd.DataFrame) -> list[dict[str, str]]:
@@ -412,7 +456,7 @@ def _type_bars(rows: Iterable[Mapping[str, str]]) -> str:
         f"""
         <div class="bar-row">
           <div class="bar-label"><strong>{escape(row["name"])}</strong><span>{escape(row["count"])} tx</span></div>
-          <div class="bar-track"><i style="width: {escape(row["pct"])}%"></i></div>
+          <div class="bar-track"><i style="width: {escape(row.get("pct_width", row["pct"]))}%"></i></div>
           <span class="bar-pct">{escape(row["pct"])}%</span>
         </div>
         """
@@ -735,9 +779,18 @@ def _stylesheet() -> str:
     }
     .bar-row {
       display: grid;
-      grid-template-columns: minmax(180px, 260px) minmax(160px, 1fr) 64px;
+      grid-template-columns: minmax(160px, 240px) minmax(120px, 1fr) 64px;
       gap: 14px;
       align-items: center;
+    }
+    .bar-label {
+      min-width: 0;
+    }
+    .bar-label strong {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .bar-label span,
     .muted,
@@ -760,6 +813,8 @@ def _stylesheet() -> str:
       color: var(--muted);
       font-variant-numeric: tabular-nums;
       text-align: right;
+      white-space: nowrap;
+      width: 64px;
     }
     .description-row td {
       padding-top: 0;
@@ -769,8 +824,8 @@ def _stylesheet() -> str:
     @media (max-width: 900px) {
       .hero { grid-template-columns: 1fr; }
       .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .bar-row { grid-template-columns: 1fr; gap: 6px; }
-      .bar-pct { text-align: left; }
+      .bar-row { grid-template-columns: minmax(0, 1.1fr) minmax(82px, 1fr) 58px; gap: 8px; }
+      .bar-pct { width: 58px; }
     }
     """
 

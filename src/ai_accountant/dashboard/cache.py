@@ -28,6 +28,7 @@ class CachedWallet:
     latest_tx: str
     pages_fetched: int
     max_pages_at_fetch: int
+    dataset_label: str = ""
 
 
 def _wallet_dir(address: str, *, cache_root: Path) -> Path:
@@ -123,6 +124,7 @@ def list_wallets(*, cache_root: Path) -> list[CachedWallet]:
                 latest_tx=str(meta.get("latest_tx") or ""),
                 pages_fetched=int(meta.get("pages_fetched") or 0),
                 max_pages_at_fetch=int(meta.get("max_pages_at_fetch") or 0),
+                dataset_label=str(meta.get("dataset_label") or ""),
             )
         )
     out.sort(key=lambda w: w.fetched_at, reverse=True)

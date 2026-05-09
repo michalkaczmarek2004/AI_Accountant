@@ -27,6 +27,7 @@ class CliHelpTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("serve", result.stdout)
         self.assertIn("fetch", result.stdout)
+        self.assertIn("demo", result.stdout)
 
     def test_serve_help_exits_zero(self) -> None:
         result = subprocess.run(
@@ -111,6 +112,14 @@ class CliFetchProgrammaticTests(unittest.TestCase):
             ]
         )
         self.assertEqual(rc, 2)
+
+    def test_demo_writes_synthetic_cache_without_api_key(self) -> None:
+        from ai_accountant.dashboard import cli
+        from ai_accountant.dashboard.demo import DEMO_WALLET_ADDRESS
+
+        rc = cli.main(["demo", "--cache-dir", str(self.tmp)])
+        self.assertEqual(rc, 0)
+        self.assertTrue((self.tmp / DEMO_WALLET_ADDRESS / "transactions.pkl").exists())
 
 
 if __name__ == "__main__":

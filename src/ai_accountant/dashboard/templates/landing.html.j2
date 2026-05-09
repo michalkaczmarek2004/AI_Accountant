@@ -2,8 +2,9 @@
 {% block title %}AI Accountant — Dashboard{% endblock %}
 {% block body %}
 <section class="hero">
+  <p class="eyebrow">Portfolio analytics</p>
   <h1>Wallet activity dashboard</h1>
-  <p class="lead">Server-cached, filterable, exportable. Paste a Solana wallet address to begin.</p>
+  <p class="lead">Server-cached, filterable, exportable portfolio intelligence for Solana wallet activity.</p>
 </section>
 
 <section class="paste-form">
@@ -11,8 +12,11 @@
     <label for="address">Solana wallet address</label>
     <input type="text" id="address" name="address" value="{{ address_input or '' }}"
            placeholder="86xCnPeV…" autocomplete="off" required>
-    <button type="submit">Open</button>
+    <button type="submit">Open Dashboard</button>
     {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+  </form>
+  <form method="post" action="{{ url_for('demo_route') }}" class="demo-form">
+    <button type="submit" class="secondary">Open Synthetic Demo</button>
   </form>
 </section>
 
@@ -24,13 +28,16 @@
     <tbody>
       {% for w in wallets %}
       <tr>
-        <td><a href="{{ url_for('wallet_page_route', address=w.address) }}"><code>{{ w.address[:8] }}…{{ w.address[-6:] }}</code></a></td>
+        <td>
+          <a href="{{ url_for('wallet_page_route', address=w.address) }}"><code>{{ w.address[:8] }}…{{ w.address[-6:] }}</code></a>
+          {% if w.dataset_label %}<span class="muted">{{ w.dataset_label }}</span>{% endif %}
+        </td>
         <td>{{ w.row_count }}</td>
         <td>{{ w.earliest_tx or '—' }} → {{ w.latest_tx or '—' }}</td>
         <td>{{ w.fetched_at[:16] | replace('T', ' ') }} UTC</td>
         <td>
-          <form method="post" action="{{ url_for('forget_route', address=w.address) }}" style="display:inline">
-            <button type="submit" class="link-button" title="Forget cache">⌫</button>
+          <form method="post" action="{{ url_for('forget_route', address=w.address) }}" class="inline-form">
+            <button type="submit" class="link-button" title="Forget cache">Forget</button>
           </form>
         </td>
       </tr>

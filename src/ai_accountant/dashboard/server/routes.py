@@ -8,6 +8,7 @@ import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from flask import (
@@ -31,8 +32,10 @@ from ...tax_assistant import (
     yearly_summary,
 )
 from .. import cache as cache_mod
+from ..demo import build_demo_cache_payload
 from ..fetcher import DashboardError, RefreshLocked, run_fetch
 from ..filters import FilterSpec
+from ..pdf_report import build_wallet_pdf_report
 from ..views import tax_page, transaction_detail, wallet_page
 
 ADDR_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
@@ -77,6 +80,12 @@ def register_routes(app: Flask) -> None:
                 _do_fetch(address)
             except DashboardError as exc:
                 return _render_error(exc), exc.http_status
+        return redirect(url_for("wallet_page_route", address=address), code=303)
+
+    @app.post("/demo")
+    def demo_route() -> Response:
+        address, df, meta = build_demo_cache_payload()
+        cache_mod.write(address, df, meta, cache_root=_cache_root())
         return redirect(url_for("wallet_page_route", address=address), code=303)
 
     @app.get("/wallet/<address>")
@@ -168,8 +177,34 @@ def register_routes(app: Flask) -> None:
             },
         )
 
+    @app.get("/wallet/<address>/report.pdf")
+    def export_pdf_route(address: str) -> Response:
+        df, meta = _unfiltered_with_meta_or_404(address)
+        spec = FilterSpec.from_querystring(request.args)
+        filtered = spec.apply(df) if not df.empty else df
+        body = build_wallet_pdf_report(
+            filtered,
+            address,
+            meta=meta,
+            tax_country=_tax_country_arg(),
+        )
+        return Response(
+            body,
+            mimetype="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{address[:8]}_ai_accountant_report.pdf"',
+            },
+        )
+
     @app.get("/wallet/<address>/tax")
     def tax_page_route(address: str) -> Response:
+        return _render_tax_page(address)
+
+    @app.get("/wallet/<address>/tax-country")
+    def tax_country_page_route(address: str) -> Response:
+        return _render_tax_page(address)
+
+    def _render_tax_page(address: str) -> Response:
         if not ADDR_RE.match(address):
             abort(404)
         try:
@@ -179,7 +214,7 @@ def register_routes(app: Flask) -> None:
         if cached is None:
             abort(404)
         df, meta = cached
-        ctx = tax_page(df, address=address, meta=meta)
+        ctx = tax_page(df, address=address, meta=meta, tax_country=_tax_country_arg())
         return render_template("tax.html.j2", **ctx)
 
     @app.get("/wallet/<address>/tax-export.csv")
@@ -259,6 +294,10 @@ def _factory():
     return current_app.config.get("AI_ACCOUNTANT_FETCHER_FACTORY")
 
 
+def _tax_country_arg() -> str | None:
+    return request.args.get("tax_country") or request.args.get("country")
+
+
 def _do_fetch(address: str) -> None:
     run_fetch(
         address,
@@ -285,6 +324,12 @@ def _filtered_or_404(address: str) -> pd.DataFrame:
 
 def _unfiltered_or_404(address: str) -> pd.DataFrame:
     """Read the full cached DataFrame, abort 404 if missing."""
+    df, _meta = _unfiltered_with_meta_or_404(address)
+    return df
+
+
+def _unfiltered_with_meta_or_404(address: str) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Read the full cached DataFrame and metadata, abort 404 if missing."""
     if not ADDR_RE.match(address):
         abort(404)
     try:
@@ -293,8 +338,7 @@ def _unfiltered_or_404(address: str) -> pd.DataFrame:
         abort(404)
     if cached is None:
         abort(404)
-    df, _ = cached
-    return df
+    return cached
 
 
 def _render_error(exc: DashboardError) -> str:

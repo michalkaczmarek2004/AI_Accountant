@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
@@ -18,8 +19,13 @@ from ai_accountant.tax_assistant import (
     _review_count,
     _review_tier,
     _row_date,
+    normalize_tax_country,
     tax_category,
     tax_classification_rows,
+    tax_country_options,
+    tax_country_profile,
+    tax_deadline_notice,
+    tax_deadline_rows,
     tax_export_frame,
     tax_review_queue,
     tax_summary,
@@ -106,6 +112,33 @@ class TaxCategoryTests(unittest.TestCase):
         self.assertIn("Unknown / Needs review", REVIEW_REQUIRED_CATEGORIES)
         self.assertNotIn("Income", REVIEW_REQUIRED_CATEGORIES)
         self.assertNotIn("Transfer", REVIEW_REQUIRED_CATEGORIES)
+
+
+class TaxCountryProfileTests(unittest.TestCase):
+    def test_country_options_start_with_united_states(self):
+        options = tax_country_options()
+        self.assertEqual(options[0]["code"], "US")
+        self.assertEqual(options[0]["label"], "United States")
+        self.assertTrue(options[0]["sources"])
+
+    def test_unknown_country_falls_back_to_us(self):
+        self.assertEqual(normalize_tax_country("PL"), "US")
+        self.assertEqual(tax_country_profile("PL")["label"], "United States")
+
+    def test_us_deadline_rows_mark_due_soon_one_month_before(self):
+        rows = tax_deadline_rows("US", [2026], today=date(2026, 5, 20))
+        q2 = next(row for row in rows if row["kind"] == "estimated_tax_q2")
+        self.assertEqual(q2["status"], "due-soon")
+        self.assertEqual(q2["status_label"], "Due in 26 days")
+        self.assertEqual(q2["warning_days"], 30)
+        self.assertEqual(q2["ack_id"], "US:deadline:2026:estimated_tax_q2:2026-06-15")
+        self.assertEqual(q2["confirm_label"], "Mark as done")
+
+    def test_us_deadline_notice_marks_overdue_for_2025_demo_year(self):
+        notice = tax_deadline_notice("US", 2025, today=date(2026, 5, 9))
+        self.assertIsNotNone(notice)
+        self.assertEqual(notice["status"], "overdue")
+        self.assertIn("2025 Form 1040", notice["label"])
 
 
 class ReviewTierTests(unittest.TestCase):
@@ -306,6 +339,8 @@ class TaxClassificationRowsTests(unittest.TestCase):
         result = tax_classification_rows(df)
         swap_row = next(r for r in result if r["category"] == "Swap")
         self.assertIn("swap", swap_row["case_keys"])
+        self.assertEqual(swap_row["category_label"], "Swap / trade")
+        self.assertIn("Swap / trade", swap_row["case_labels"])
 
     def test_sol_net_is_string(self):
         rows = [_row(tag_type="Transfer", native_net_sol=Decimal("1.0"))]
@@ -370,7 +405,11 @@ class TaxReviewQueueTests(unittest.TestCase):
             "date", "signature", "sig_short", "category", "sol_net",
             "short_explanation", "known_facts", "unknown_facts",
             "suggested_actions", "expanded_explanation", "review_label",
-            "status", "source", "tag_protocol", "tier",
+            "review_reason", "rule_id", "suggested_tax_action", "evidence",
+            "missing_information", "tax_accounting_note", "category_label",
+            "tax_treatment", "tax_due", "tax_calculation", "tax_forms",
+            "tax_rate_note", "tax_country", "tax_country_label", "case_key", "detected_pattern",
+            "tax_deadline_notice", "transaction_warning", "status", "source", "tag_protocol", "tier",
         ):
             self.assertIn(key, item, msg=f"missing key: {key}")
 
@@ -381,12 +420,106 @@ class TaxReviewQueueTests(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["tier"], 6)
 
+    def test_staking_withdrawal_review_reason_is_tax_specific(self):
+        rows = [_row(tag_type="Stake/Unstake", native_net_sol=Decimal("1.0"))]
+        df = pd.DataFrame(rows)
+        result = tax_review_queue(df)
+        self.assertEqual(result[0]["review_label"], "No action needed")
+        self.assertEqual(result[0]["review_reason"], "Staking withdrawal source needs review")
+        self.assertEqual(result[0]["rule_id"], "staking_withdrawal_principal_reward")
+
+    def test_unknown_review_reason_names_unknown_program(self):
+        rows = [_row(tag_type="Unknown", tag_protocol="Unknown", tag_confidence=0.3)]
+        df = pd.DataFrame(rows)
+        result = tax_review_queue(df)
+        self.assertEqual(result[0]["review_reason"], "Unknown program")
+        self.assertEqual(result[0]["rule_id"], "unknown_program")
+
     def test_sig_short_is_truncated(self):
         rows = [_row(tag_type="Swap", signature="A" * 87)]
         df = pd.DataFrame(rows)
         item = tax_review_queue(df)[0]
         self.assertTrue(item["sig_short"].endswith("…"))
         self.assertLessEqual(len(item["sig_short"]), 10)
+
+    def test_review_reasons_cover_tax_patterns(self):
+        cases = [
+            ("Swap", {}, "Swap / trade needs cost-basis review", "swap_trade_cost_basis"),
+            ("NFT Buy/Sell", {"native_net_sol": Decimal("-1.0")}, "NFT transaction needs cost-basis review", "nft_cost_basis"),
+            ("LP Deposit/Withdraw", {}, "Liquidity pool activity needs review", "lp_cost_basis"),
+            ("Perpetual Trade", {}, "Perpetual trade needs PnL review", "perp_pnl_review"),
+            ("Airdrop", {}, "Airdrop income treatment may need review", "airdrop_income_review"),
+        ]
+        for tag_type, overrides, reason, rule_id in cases:
+            with self.subTest(tag_type=tag_type):
+                row = _row(tag_type=tag_type, **overrides)
+                item = tax_review_queue(pd.DataFrame([row]))[0]
+                self.assertEqual(item["review_reason"], reason)
+                self.assertEqual(item["rule_id"], rule_id)
+                self.assertNotIn("No action needed", item["suggested_tax_action"])
+
+    def test_failed_large_and_source_unknown_reasons_are_specific(self):
+        rows = [
+            _row(tag_type="Transfer", native_net_sol=Decimal("0.1"), status="failed", signature="F" * 87),
+            _row(tag_type="Transfer", native_net_sol=Decimal("1.0"), signature="L" * 87),
+            _row(
+                tag_type="Transfer",
+                native_net_sol=Decimal("0.1"),
+                source="UNKNOWN",
+                tag_protocol="Unknown",
+                signature="S" * 87,
+            ),
+        ]
+        by_rule = {
+            item["rule_id"]: item
+            for item in tax_review_queue(pd.DataFrame(rows))
+        }
+        self.assertEqual(by_rule["failed_transaction_fee"]["review_reason"], "Failed transaction")
+        self.assertEqual(by_rule["large_transfer_label"]["review_reason"], "Large incoming transfer")
+        self.assertEqual(by_rule["source_unknown"]["review_reason"], "Source unknown")
+
+    def test_review_queue_has_no_no_action_suggestions(self):
+        rows = [
+            _row(tag_type="Swap"),
+            _row(tag_type="Stake/Unstake", native_net_sol=Decimal("1.0")),
+            _row(tag_type="Unknown", tag_protocol="Unknown", tag_confidence=0.3),
+        ]
+        for item in tax_review_queue(pd.DataFrame(rows)):
+            self.assertNotEqual(item["review_reason"], "No action needed")
+            self.assertNotIn("No action needed", item["suggested_tax_action"])
+            self.assertTrue(item["evidence"])
+
+    def test_us_country_adds_rule_specific_tax_note(self):
+        rows = [_row(tag_type="Swap")]
+        item = tax_review_queue(pd.DataFrame(rows), country="US")[0]
+        self.assertEqual(item["tax_country"], "US")
+        self.assertEqual(item["tax_country_label"], "United States")
+        self.assertIn("taxable disposal", item["tax_treatment"])
+        self.assertIn("Form 8949", item["tax_accounting_note"])
+        self.assertIn("capital gain", item["tax_rate_note"])
+
+    def test_us_nft_sale_explains_tax_on_gain_not_gross_proceeds(self):
+        rows = [_row(tag_type="NFT Buy/Sell", native_net_sol=Decimal("3.2"))]
+        item = tax_review_queue(pd.DataFrame(rows), country="US")[0]
+        self.assertEqual(item["rule_id"], "nft_cost_basis")
+        self.assertIn("Potential tax is usually capital gains tax on profit", item["tax_due"])
+        self.assertIn("sale proceeds", item["tax_calculation"])
+
+    def test_fee_only_unknown_program_gets_warning(self):
+        rows = [
+            _row(
+                tag_type="Unknown",
+                tag_protocol="Unknown",
+                source="UNKNOWN",
+                fee_sol=Decimal("0.000013"),
+                native_net_sol=Decimal("0"),
+                token_flow_details=[],
+            )
+        ]
+        item = tax_review_queue(pd.DataFrame(rows), country="US")[0]
+        self.assertEqual(item["transaction_warning"]["title"], "Fee-only unknown program interaction")
+        self.assertIn("paid a network fee", item["transaction_warning"]["message"])
+        self.assertIn("warning:", item["transaction_warning"]["ack_id"])
 
 
 class YearlySummaryTests(unittest.TestCase):
