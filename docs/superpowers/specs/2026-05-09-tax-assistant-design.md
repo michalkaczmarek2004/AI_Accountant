@@ -25,7 +25,7 @@ The Tax Assistant lives at `/wallet/<address>/tax` and is a fully separate page.
 
 ## Tax Category Mapping
 
-`explainer._classify(row)` returns a `case` key. `tax_assistant.py` maps it to one of eight accounting labels:
+`explainer._classify(row)` returns a `case` key. `tax_assistant.py` maps it to one of seven accounting labels:
 
 | `case` key(s) | Tax category | Taxable by default | Review required |
 |---|---|---|---|

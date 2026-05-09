@@ -203,6 +203,8 @@ def register_routes(app: Flask) -> None:
         records = json.loads(export.to_json(orient="records", default_handler=str))
         for rec in records:
             rec["is_potentially_taxable"] = rec.get("is_potentially_taxable") == "yes"
+            if "notes" in rec:
+                rec["short_explanation"] = rec.pop("notes")
         raw_summary = tax_summary(df, address)
         body = json.dumps(
             {

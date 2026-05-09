@@ -64,7 +64,7 @@ def wallet_page(
         "asset_flow": asset_flow,
         "transaction_mix": mix,
         "review_queue": risk,
-        "transactions": list(zip(tx_rows, tx_explanations)),
+        "transactions": list(zip(tx_rows, tx_explanations, strict=True)),
         "transactions_total": total,
         "transactions_page": page,
         "transactions_pages": pages,
