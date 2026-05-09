@@ -1,0 +1,158 @@
+{% extends "base.html.j2" %}
+{% block title %}Tax Assistant — {{ address_short }} — AI Accountant{% endblock %}
+{% block body %}
+
+<section class="wallet-header">
+  <div>
+    <p class="eyebrow">Tax Assistant</p>
+    <h1><code title="{{ address }}">{{ address_short }}</code></h1>
+    {% if meta %}
+    <p class="meta-line">Last updated: {{ meta.fetched_at[:16] | replace('T', ' ') }} UTC</p>
+    {% endif %}
+  </div>
+  <div class="header-actions">
+    <a href="{{ url_for('wallet_page_route', address=address) }}" class="link-button">← Back to wallet</a>
+  </div>
+</section>
+
+<div class="tax-disclaimer">
+  This is not financial or tax advice. Always consult a qualified tax professional.
+</div>
+
+{% if no_data %}
+<section class="empty-cache">
+  <p>No tax-relevant events found for this wallet. Fetch transactions first, or this wallet has no parsed activity yet.</p>
+</section>
+
+{% else %}
+
+<section class="kpi-grid tax-kpi-grid">
+  <article class="kpi"><span>Income</span><strong class="positive">{{ summary.total_income_sol }}</strong></article>
+  <article class="kpi"><span>Expense</span><strong>{{ summary.total_expense_sol }}</strong></article>
+  <article class="kpi"><span>Fees paid</span><strong>{{ summary.total_fees_sol }}</strong></article>
+  <article class="kpi"><span>Net change</span><strong class="{{ 'positive' if summary.net_positive else 'negative' }}">{{ summary.net_sol }}</strong></article>
+  <article class="kpi"><span>Potentially taxable events</span><strong>{{ summary.taxable_count }}</strong></article>
+  <article class="kpi"><span>Review needed</span><strong>{{ summary.review_count }}</strong></article>
+</section>
+
+<section class="report-section">
+  <h2>Tax Classification</h2>
+  {% if classification %}
+  <table>
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th>Source case</th>
+        <th>Count</th>
+        <th>SOL net</th>
+        <th>Review?</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in classification %}
+      <tr>
+        <td><strong>{{ r.category }}</strong></td>
+        <td><code class="muted">{{ r.case_keys | join(", ") }}</code></td>
+        <td>{{ r.count }}</td>
+        <td>{{ r.sol_net }}</td>
+        <td>{% if r.flagged %}<mark class="medium">⚠ review</mark>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No transaction categories found.</p>
+  {% endif %}
+</section>
+
+<section class="report-section">
+  <h2>Review Queue</h2>
+  {% if review_queue %}
+  <div class="tx-list">
+    <div class="tx-list-header" style="grid-template-columns: 100px 1fr 1fr 90px 1fr;">
+      <span>Date</span>
+      <span>Category</span>
+      <span>Change</span>
+      <span>Status</span>
+      <span>Review</span>
+    </div>
+    {% for item in review_queue %}
+    <details class="tx-row">
+      <summary class="tx-summary" style="grid-template-columns: 100px 1fr 1fr 90px 1fr;">
+        <span>{{ item.date }}</span>
+        <span><mark class="neutral review-tier">{{ item.category }}</mark></span>
+        <span>{{ item.sol_net }}</span>
+        <span><mark class="{{ item.status }}">{{ item.status }}</mark></span>
+        <span>{{ item.review_label }}</span>
+      </summary>
+      <div class="tx-expanded">
+        <p>{{ item.short_explanation }}</p>
+        {% if item.known_facts %}
+        <h4>Known</h4>
+        <ul>{% for f in item.known_facts %}<li>{{ f }}</li>{% endfor %}</ul>
+        {% endif %}
+        {% if item.unknown_facts %}
+        <h4>Missing information</h4>
+        <ul>{% for f in item.unknown_facts %}<li>{{ f }}</li>{% endfor %}</ul>
+        {% endif %}
+        {% if item.suggested_actions %}
+        <h4>Suggested actions</h4>
+        <ul>{% for a in item.suggested_actions %}<li>{{ a }}</li>{% endfor %}</ul>
+        {% endif %}
+        {% if item.expanded_explanation %}
+        <p class="muted">{{ item.expanded_explanation }}</p>
+        {% endif %}
+        <div class="tx-technical"><code>Tier {{ item.tier }} · {{ item.source or "unknown source" }}</code></div>
+        <p><a href="{{ url_for('tx_detail_route', address=address, sig=item.signature) }}" class="muted">View raw transaction →</a></p>
+      </div>
+    </details>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="empty">No transactions flagged for review.</p>
+  {% endif %}
+</section>
+
+<section class="report-section">
+  <h2>Yearly Summary</h2>
+  {% if yearly %}
+  <table>
+    <thead>
+      <tr>
+        <th>Year</th>
+        <th>Income</th>
+        <th>Expense</th>
+        <th>Fees</th>
+        <th>Potentially taxable</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in yearly %}
+      <tr>
+        <td><strong>{{ r.year }}</strong></td>
+        <td>{{ r.income_sol }}</td>
+        <td>{{ r.expense_sol }}</td>
+        <td>{{ r.fees_sol }}</td>
+        <td>{{ r.taxable_count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No yearly data available.</p>
+  {% endif %}
+</section>
+
+<section class="export-bar">
+  <a href="{{ url_for('tax_export_csv_route', address=address) }}">Download Tax CSV</a>
+  <a href="{{ url_for('tax_export_json_route', address=address) }}">Download Accountant JSON</a>
+  <a href="{{ url_for('tax_summary_csv_route', address=address) }}">Download Yearly Summary CSV</a>
+</section>
+
+{% endif %}
+
+<div class="tax-disclaimer" style="margin-top: 16px;">
+  This is not financial or tax advice. Always consult a qualified tax professional.
+</div>
+
+{% endblock %}

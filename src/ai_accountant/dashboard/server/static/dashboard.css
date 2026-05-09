@@ -143,3 +143,19 @@ details[open] > .tx-summary { background: var(--accent-soft); }
   .tx-list-header { display: none; }
   .tx-summary { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto auto; }
 }
+/* Tax Assistant */
+.tax-disclaimer {
+  background: #fef9e7;
+  border-left: 4px solid var(--warn);
+  color: var(--warn);
+  padding: 12px 16px;
+  border-radius: 0 6px 6px 0;
+  margin: 16px 0;
+  font-size: 14px;
+}
+.tax-kpi-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.review-tier {
+  font-size: 12px;
+}
