@@ -453,8 +453,8 @@ class TaxExportFrameTests(unittest.TestCase):
 
     def test_is_potentially_taxable_values(self):
         rows = [
-            _row(tag_type="Swap"),
-            _row(tag_type="Transfer", native_net_sol=Decimal("0.1")),
+            _row(tag_type="Swap"),        # → Swap → "yes"
+            _row(tag_type="Mint/Burn"),   # → Transfer (mint_burn case) → "no"
         ]
         df = pd.DataFrame(rows)
         result = tax_export_frame(df)

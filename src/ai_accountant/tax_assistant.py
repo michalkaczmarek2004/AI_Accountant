@@ -306,9 +306,6 @@ _TAX_EXPORT_COLUMNS = [
 ]
 
 
-_EXPORT_TAXABLE: frozenset[str] = TAXABLE_CATEGORIES & REVIEW_REQUIRED_CATEGORIES
-
-
 def tax_export_frame(df: pd.DataFrame) -> pd.DataFrame:
     """Return a flat DataFrame suitable for CSV export with full traceability columns."""
     from .explainer import explain_row
@@ -332,7 +329,7 @@ def tax_export_frame(df: pd.DataFrame) -> pd.DataFrame:
             "sol_net": _fmt(_safe_decimal(row.get("native_net_sol")), signed=True),
             "token_summary": _safe_str(row.get("net_flow_summary"), ""),
             "fee_sol": _fmt(_safe_decimal(row.get("fee_sol"))),
-            "is_potentially_taxable": "yes" if cat in _EXPORT_TAXABLE else "no",
+            "is_potentially_taxable": "yes" if cat in TAXABLE_CATEGORIES else "no",
             "review_label": exp.review_label,
             "notes": exp.short_explanation[:200],
         })
