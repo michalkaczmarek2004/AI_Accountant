@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Any
 
 import pandas as pd
 
@@ -117,3 +118,91 @@ def _fmt(d: Decimal, *, signed: bool = False) -> str:
         return s
     except Exception:
         return "+0" if signed else "0"
+
+
+# ---------------------------------------------------------------------------
+# Public API — aggregation
+# ---------------------------------------------------------------------------
+
+
+def tax_summary(df: pd.DataFrame, address: str) -> dict[str, Any]:
+    """Return aggregate tax metrics over the full (unfiltered) DataFrame."""
+    zero = Decimal("0")
+    if df.empty:
+        return {
+            "total_income_sol": zero,
+            "total_expense_sol": zero,
+            "total_fees_sol": zero,
+            "net_sol": zero,
+            "taxable_count": 0,
+            "review_count": 0,
+        }
+
+    income = zero
+    expense = zero
+    fees = zero
+    taxable_count = 0
+
+    for _, row in df.iterrows():
+        if _safe_str(row.get("status"), "") != "succeeded":
+            continue
+        cat = tax_category(row)
+        net = _safe_decimal(row.get("native_net_sol"))
+        if cat == "Income":
+            income += net
+        elif cat == "Expense":
+            expense += net.copy_abs()
+        if cat in TAXABLE_CATEGORIES:
+            taxable_count += 1
+        if bool(row.get("fee_paid_by_wallet")):
+            fees += _safe_decimal(row.get("fee_sol"))
+
+    return {
+        "total_income_sol": income,
+        "total_expense_sol": expense,
+        "total_fees_sol": fees,
+        "net_sol": income - expense,
+        "taxable_count": taxable_count,
+        "review_count": _review_count(df),
+    }
+
+
+def tax_classification_rows(df: pd.DataFrame) -> list[dict]:
+    """Return one dict per tax category present, sorted by count (Unknown always last)."""
+    if df.empty:
+        return []
+
+    buckets: dict[str, dict] = {}
+    for _, row in df.iterrows():
+        case = _classify(row)
+        cat = _CASE_TO_CATEGORY.get(case, "Unknown / Needs review")
+        if cat not in buckets:
+            buckets[cat] = {"count": 0, "sol_net": Decimal("0"), "case_keys": set()}
+        buckets[cat]["count"] += 1
+        buckets[cat]["sol_net"] += _safe_decimal(row.get("native_net_sol"))
+        buckets[cat]["case_keys"].add(case)
+
+    unknown_bucket = buckets.pop("Unknown / Needs review", None)
+
+    rows = [
+        {
+            "category": cat,
+            "case_keys": sorted(data["case_keys"]),
+            "count": data["count"],
+            "sol_net": _fmt(data["sol_net"], signed=True),
+            "flagged": cat in REVIEW_REQUIRED_CATEGORIES,
+        }
+        for cat, data in buckets.items()
+    ]
+    rows.sort(key=lambda r: -r["count"])
+
+    if unknown_bucket is not None:
+        rows.append({
+            "category": "Unknown / Needs review",
+            "case_keys": sorted(unknown_bucket["case_keys"]),
+            "count": unknown_bucket["count"],
+            "sol_net": _fmt(unknown_bucket["sol_net"], signed=True),
+            "flagged": True,
+        })
+
+    return rows

@@ -19,6 +19,8 @@ from ai_accountant.tax_assistant import (
     _review_tier,
     _row_date,
     tax_category,
+    tax_classification_rows,
+    tax_summary,
 )
 
 
@@ -188,6 +190,125 @@ class UtilityHelperTests(unittest.TestCase):
 
     def test_fmt_integer_decimal_not_corrupted(self):
         self.assertEqual(_fmt(Decimal("100")), "100")
+
+
+class TaxSummaryTests(unittest.TestCase):
+    def test_empty_df_returns_zeros(self):
+        df = pd.DataFrame(columns=DATAFRAME_COLUMNS)
+        result = tax_summary(df, "wallet")
+        self.assertEqual(result["total_income_sol"], Decimal("0"))
+        self.assertEqual(result["total_expense_sol"], Decimal("0"))
+        self.assertEqual(result["total_fees_sol"], Decimal("0"))
+        self.assertEqual(result["net_sol"], Decimal("0"))
+        self.assertEqual(result["taxable_count"], 0)
+        self.assertEqual(result["review_count"], 0)
+
+    def test_income_summed_for_succeeded_rows(self):
+        rows = [
+            _row(tag_type="Transfer", native_net_sol=Decimal("2.0")),
+            _row(tag_type="Transfer", native_net_sol=Decimal("1.0")),
+        ]
+        df = pd.DataFrame(rows)
+        result = tax_summary(df, "wallet")
+        self.assertEqual(result["total_income_sol"], Decimal("3.0"))
+
+    def test_failed_rows_excluded_from_income(self):
+        rows = [
+            _row(tag_type="Transfer", native_net_sol=Decimal("2.0")),
+            _row(tag_type="Transfer", native_net_sol=Decimal("1.0"), status="failed"),
+        ]
+        df = pd.DataFrame(rows)
+        result = tax_summary(df, "wallet")
+        self.assertEqual(result["total_income_sol"], Decimal("2.0"))
+
+    def test_expense_is_absolute_value(self):
+        rows = [_row(tag_type="Transfer", native_net_sol=Decimal("-1.5"))]
+        df = pd.DataFrame(rows)
+        result = tax_summary(df, "wallet")
+        self.assertEqual(result["total_expense_sol"], Decimal("1.5"))
+
+    def test_taxable_count_excludes_staking_and_unknown(self):
+        rows = [
+            _row(tag_type="Swap"),
+            _row(tag_type="Airdrop"),
+            _row(tag_type="Stake/Unstake", native_net_sol=Decimal("1.0")),
+            _row(tag_type=None),
+        ]
+        df = pd.DataFrame(rows)
+        result = tax_summary(df, "wallet")
+        self.assertEqual(result["taxable_count"], 2)
+
+    def test_fees_summed_only_when_paid_by_wallet(self):
+        rows = [
+            _row(fee_sol=Decimal("0.001"), fee_paid_by_wallet=True),
+            _row(fee_sol=Decimal("0.002"), fee_paid_by_wallet=False),
+        ]
+        df = pd.DataFrame(rows)
+        result = tax_summary(df, "wallet")
+        self.assertEqual(result["total_fees_sol"], Decimal("0.001"))
+
+    def test_net_sol_is_income_minus_expense(self):
+        rows = [
+            _row(tag_type="Transfer", native_net_sol=Decimal("3.0")),
+            _row(tag_type="Transfer", native_net_sol=Decimal("-1.0")),
+        ]
+        df = pd.DataFrame(rows)
+        result = tax_summary(df, "wallet")
+        self.assertEqual(result["net_sol"], Decimal("2.0"))
+
+    def test_review_count_includes_swap_rows(self):
+        rows = [_row(tag_type="Swap"), _row(tag_type="Swap")]
+        df = pd.DataFrame(rows)
+        result = tax_summary(df, "wallet")
+        self.assertEqual(result["review_count"], 2)
+
+
+class TaxClassificationRowsTests(unittest.TestCase):
+    def test_empty_df_returns_empty(self):
+        df = pd.DataFrame(columns=DATAFRAME_COLUMNS)
+        self.assertEqual(tax_classification_rows(df), [])
+
+    def test_unknown_always_last(self):
+        rows = [
+            _row(tag_type=None),
+            _row(tag_type="Swap"),
+            _row(tag_type="Swap"),
+        ]
+        df = pd.DataFrame(rows)
+        result = tax_classification_rows(df)
+        self.assertEqual(result[-1]["category"], "Unknown / Needs review")
+
+    def test_rows_sorted_by_count_descending(self):
+        rows = [
+            _row(tag_type="Airdrop"),
+            _row(tag_type="Swap"),
+            _row(tag_type="Swap"),
+            _row(tag_type="Swap"),
+        ]
+        df = pd.DataFrame(rows)
+        result = [r for r in tax_classification_rows(df) if r["category"] != "Unknown / Needs review"]
+        self.assertEqual(result[0]["category"], "Swap")
+
+    def test_flagged_for_review_required_categories(self):
+        rows = [_row(tag_type="Swap"), _row(tag_type="Transfer", native_net_sol=Decimal("0.1"))]
+        df = pd.DataFrame(rows)
+        by_cat = {r["category"]: r["flagged"] for r in tax_classification_rows(df)}
+        self.assertTrue(by_cat["Swap"])
+        self.assertFalse(by_cat["Income"])
+
+    def test_case_keys_field_present(self):
+        rows = [_row(tag_type="Swap")]
+        df = pd.DataFrame(rows)
+        result = tax_classification_rows(df)
+        swap_row = next(r for r in result if r["category"] == "Swap")
+        self.assertIn("swap", swap_row["case_keys"])
+
+    def test_sol_net_is_string(self):
+        rows = [_row(tag_type="Transfer", native_net_sol=Decimal("1.0"))]
+        df = pd.DataFrame(rows)
+        result = tax_classification_rows(df)
+        income_row = next(r for r in result if r["category"] == "Income")
+        self.assertIsInstance(income_row["sol_net"], str)
 
 
 if __name__ == "__main__":
