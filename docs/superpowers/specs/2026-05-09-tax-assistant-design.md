@@ -27,19 +27,25 @@ The Tax Assistant lives at `/wallet/<address>/tax` and is a fully separate page.
 
 `explainer._classify(row)` returns a `case` key. `tax_assistant.py` maps it to one of eight accounting labels:
 
-| `case` key(s) | Tax category | Taxable by default |
-|---|---|---|
-| `sol_in`, `token_in`, `nft_received` | Income | Yes |
-| `sol_out`, `token_out` | Expense | No |
-| `swap`, `nft_bought`, `nft_sold`, `lp`, `perp` | Swap | Yes |
-| `staking_deposit`, `bridge`, `mint_burn` | Transfer | No |
-| `staking_withdrawal` | Staking reward | Yes |
-| `airdrop` | Airdrop | Yes |
-| `unknown` | Unknown / Needs review | No (flagged for review) |
+| `case` key(s) | Tax category | Taxable by default | Review required |
+|---|---|---|---|
+| `sol_in`, `token_in`, `nft_received` | Income | Yes | No |
+| `sol_out`, `token_out` | Expense | No | No |
+| `swap`, `nft_bought`, `nft_sold`, `lp`, `perp` | Swap | Yes | Yes |
+| `staking_deposit`, `bridge`, `mint_burn` | Transfer | No | No |
+| `staking_withdrawal` | Staking / Needs review | No | Yes |
+| `airdrop` | Airdrop | Yes | Yes |
+| `unknown` | Unknown / Needs review | No | Yes |
 
-`TAXABLE_CATEGORIES = frozenset({"Income", "Swap", "Airdrop", "Staking reward"})`
+`TAXABLE_CATEGORIES = frozenset({"Income", "Swap", "Airdrop"})`
 
-Transfer is non-taxable by default. A Transfer row enters the review queue only when `explainer._is_source_unknown(row)` is true or the original `review_label` from `explain_row()` is not "No action needed".
+**Staking withdrawals** are classified as "Staking / Needs review" rather than "Staking reward" because the parser cannot reliably distinguish a principal return from a reward-only payout. They are non-taxable by default but always flagged `review_required = True`. A future parser enhancement may introduce a `staking_reward_only` case that maps to a confirmed "Staking reward" category.
+
+**Unknown transactions** are non-taxable by default but always carry `review_required = True`.
+
+**Transfer** rows are non-taxable by default. A Transfer row enters the review queue only when `_is_source_unknown(row)` is true, `status == "failed"`, `abs(native_net_sol) > LARGE_FLOW_THRESHOLD`, or the original `review_label` is not "No action needed".
+
+`LARGE_FLOW_THRESHOLD = Decimal("0.5")` — MVP default; intended to be made user-configurable in a future release.
 
 ---
 
@@ -58,7 +64,7 @@ def tax_summary(df: pd.DataFrame, address: str) -> dict[str, Any]:
       total_expense_sol  Decimal  – abs sum of native_net_sol for Expense rows (succeeded only)
       total_fees_sol     Decimal  – sum of fee_sol where fee_paid_by_wallet (succeeded only)
       net_sol            Decimal  – total_income_sol - total_expense_sol
-      taxable_count      int      – rows whose tax_category is in TAXABLE_CATEGORIES (succeeded)
+      taxable_count      int      – rows whose tax_category is in TAXABLE_CATEGORIES (succeeded only; staking_withdrawal and unknown excluded)
       review_count       int      – rows in the review queue (all statuses)
     """
 
@@ -107,14 +113,14 @@ Rows are ordered by tier (ascending = higher priority), then by `timestamp_unix`
 | 1 | `tax_category == "Unknown / Needs review"` |
 | 2 | `tax_category == "Swap"` |
 | 3 | `tax_category == "Airdrop"` |
-| 4 | `tax_category == "Staking reward"` |
+| 4 | `tax_category == "Staking / Needs review"` |
 | 5 | `status == "failed"` |
 | 6 | Large inflow or outflow — `abs(native_net_sol) > LARGE_FLOW_THRESHOLD` (0.5 SOL) |
 | 7 | Missing counterparty — `_is_source_unknown(row)` |
 
-A row that matches multiple tiers is placed at its lowest tier number. Transfer rows only appear if they hit tier 5, 6, or 7. Non-review categories (Income, Expense, Transfer) only appear if they hit one of those three tiers.
+A row that matches multiple tiers is placed at its lowest tier number. Transfer rows only appear if they hit tier 5, 6, or 7. Income and Expense rows only appear if they hit tier 5, 6, or 7.
 
-`LARGE_FLOW_THRESHOLD = Decimal("0.5")`
+`LARGE_FLOW_THRESHOLD = Decimal("0.5")` — MVP default; intended to be user-configurable in a future release.
 
 ---
 
@@ -193,9 +199,11 @@ Rendered in place of sections 4–8. Section 9 (disclaimer) always shows.
 CSS: reuse `.kpi-grid`; extend grid to 6 columns (already the case on the wallet page).
 
 ### 5. Tax classification table
-Columns: Category · Count · SOL net · Review?
+Columns: Category · Source case · Count · SOL net · Review?
 
-`⚠ review` badge (amber) in the Review? column for categories in `REVIEW_CATEGORIES`.
+`source case` shows the original `case_key` value (e.g. `swap`, `staking_withdrawal`) so users can trace how the tax category was derived. When a category groups multiple cases (e.g. Swap covers `swap`, `nft_bought`, `nft_sold`, `lp`, `perp`), the column lists all distinct case values present, comma-separated.
+
+`⚠ review` badge (amber) in the Review? column for categories where `review_required = True`.
 
 Empty-category message if `classification == []`.
 
