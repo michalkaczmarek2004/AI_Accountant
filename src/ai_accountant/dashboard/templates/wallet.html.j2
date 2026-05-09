@@ -8,7 +8,7 @@
     {% if meta %}
     <p class="meta-line">
       {{ meta.row_count }} transactions • {{ meta.earliest_tx or '—' }} → {{ meta.latest_tx or '—' }} •
-      Fetched {{ meta.fetched_at }} • Pages: {{ meta.pages_fetched }}/{{ meta.max_pages_at_fetch or '∞' }}
+      Last updated: {{ meta.fetched_at[:16] | replace('T', ' ') }} UTC • Pages: {{ meta.pages_fetched }}/{{ meta.max_pages_at_fetch or '∞' }}
     </p>
     {% else %}
     <p class="meta-line">No data cached for this wallet yet.</p>
@@ -19,6 +19,7 @@
       <button type="submit" class="primary">{% if meta %}Refresh{% else %}Fetch{% endif %}</button>
     </form>
     {% if meta %}
+    <a href="{{ url_for('tax_page_route', address=address) }}" class="link-button">Tax Assistant</a>
     <form method="post" action="{{ url_for('forget_route', address=address) }}">
       <button type="submit" class="link-button">Forget</button>
     </form>
@@ -81,9 +82,9 @@
   <article class="kpi"><span>Transactions {% if filter_active %}(filtered){% else %}(all time){% endif %}</span><strong>{{ kpis.total }}</strong></article>
   <article class="kpi"><span>Succeeded</span><strong>{{ kpis.succeeded }}</strong></article>
   <article class="kpi"><span>Failed</span><strong>{{ kpis.failed }}</strong></article>
-  <article class="kpi"><span>Sources</span><strong>{{ kpis.sources }}</strong></article>
-  <article class="kpi"><span>Wallet fees</span><strong>{{ kpis.fee_wallet }}</strong></article>
-  <article class="kpi"><span>All parsed fees</span><strong>{{ kpis.fee_total }}</strong></article>
+  <article class="kpi"><span>Unique counterparties</span><strong>{{ kpis.sources }}</strong></article>
+  <article class="kpi"><span>Fees paid by this wallet</span><strong>{{ kpis.fee_wallet }}</strong></article>
+  <article class="kpi"><span>Total network fees observed</span><strong>{{ kpis.fee_total }}</strong></article>
 </section>
 
 <section class="report-section">
@@ -163,7 +164,6 @@
       <span>Change</span>
       <span>Status</span>
       <span>Review</span>
-      <span>Confidence</span>
     </div>
     {% for r, exp in transactions %}
     <details class="tx-row">
@@ -173,10 +173,6 @@
         <span>{{ r.tag_assets or r.tag_amount_display or '—' }}</span>
         <span><mark class="{{ r.status }}">{{ r.status }}</mark></span>
         <span>{{ exp.review_label }}</span>
-        <span>
-          {% set conf = exp.confidence_percent %}
-          <mark class="confidence {% if conf >= 80 %}high{% elif conf >= 50 %}medium{% else %}low{% endif %}">{{ conf }}%</mark>
-        </span>
       </summary>
       <div class="tx-expanded">
         <p>{{ exp.short_explanation }}</p>

@@ -206,5 +206,62 @@ class TaggedDashboardRenderTests(_RouteCase):
         self.assertEqual(resp.status_code, 200)
 
 
+class TaxRouteTests(_RouteCase):
+    def setUp(self) -> None:
+        super().setUp()
+        # Seed the cache by triggering a fetch with the fake fetcher
+        self.client.post("/", data={"address": WALLET})
+
+    def test_tax_page_returns_200(self) -> None:
+        resp = self.client.get(f"/wallet/{WALLET}/tax")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.content_type.startswith("text/html"))
+
+    def test_tax_page_contains_disclaimer(self) -> None:
+        resp = self.client.get(f"/wallet/{WALLET}/tax")
+        self.assertIn(b"not financial or tax advice", resp.data)
+
+    def test_tax_page_unknown_address_returns_404(self) -> None:
+        resp = self.client.get(f"/wallet/{WALLET_BAD}/tax")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_tax_page_uncached_wallet_returns_404(self) -> None:
+        OTHER = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
+        resp = self.client.get(f"/wallet/{OTHER}/tax")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_tax_export_csv_returns_200_with_csv_mimetype(self) -> None:
+        resp = self.client.get(f"/wallet/{WALLET}/tax-export.csv")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.mimetype.startswith("text/csv"))
+
+    def test_tax_export_json_returns_200_with_json_mimetype(self) -> None:
+        resp = self.client.get(f"/wallet/{WALLET}/tax-export.json")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.mimetype.startswith("application/json"))
+
+    def test_tax_export_json_contains_disclaimer(self) -> None:
+        resp = self.client.get(f"/wallet/{WALLET}/tax-export.json")
+        self.assertIn(b"not financial or tax advice", resp.data)
+
+    def test_tax_export_json_has_meta_and_transactions_keys(self) -> None:
+        import json
+        resp = self.client.get(f"/wallet/{WALLET}/tax-export.json")
+        body = json.loads(resp.data)
+        self.assertIn("meta", body)
+        self.assertIn("transactions", body)
+        self.assertIn("summary", body)
+        self.assertIn("yearly", body)
+
+    def test_tax_summary_csv_returns_200_with_csv_mimetype(self) -> None:
+        resp = self.client.get(f"/wallet/{WALLET}/tax-summary.csv")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.mimetype.startswith("text/csv"))
+
+    def test_tax_export_csv_unknown_address_returns_404(self) -> None:
+        resp = self.client.get(f"/wallet/{WALLET_BAD}/tax-export.csv")
+        self.assertEqual(resp.status_code, 404)
+
+
 if __name__ == "__main__":
     unittest.main()

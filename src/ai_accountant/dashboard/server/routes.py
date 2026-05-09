@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import re
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -22,10 +23,17 @@ from flask import (
 
 from ...exceptions import InvalidSolanaAddressError
 from ...report import transaction_export_frame
+from ...tax_assistant import (
+    TAX_DISCLAIMER,
+    tax_export_frame,
+    tax_summary,
+    tax_yearly_export_frame,
+    yearly_summary,
+)
 from .. import cache as cache_mod
 from ..fetcher import DashboardError, RefreshLocked, run_fetch
 from ..filters import FilterSpec
-from ..views import transaction_detail, wallet_page
+from ..views import tax_page, transaction_detail, wallet_page
 
 ADDR_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
 SIG_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{80,90}$")
@@ -160,6 +168,78 @@ def register_routes(app: Flask) -> None:
             },
         )
 
+    @app.get("/wallet/<address>/tax")
+    def tax_page_route(address: str) -> Response:
+        if not ADDR_RE.match(address):
+            abort(404)
+        try:
+            cached = cache_mod.read(address, cache_root=_cache_root())
+        except InvalidSolanaAddressError:
+            abort(404)
+        if cached is None:
+            abort(404)
+        df, meta = cached
+        ctx = tax_page(df, address=address, meta=meta)
+        return render_template("tax.html.j2", **ctx)
+
+    @app.get("/wallet/<address>/tax-export.csv")
+    def tax_export_csv_route(address: str) -> Response:
+        df = _unfiltered_or_404(address)
+        export = tax_export_frame(df)
+        buf = io.StringIO()
+        export.to_csv(buf, index=False)
+        return Response(
+            buf.getvalue(),
+            mimetype="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{address[:8]}_tax.csv"',
+            },
+        )
+
+    @app.get("/wallet/<address>/tax-export.json")
+    def tax_export_json_route(address: str) -> Response:
+        df = _unfiltered_or_404(address)
+        export = tax_export_frame(df)
+        records = json.loads(export.to_json(orient="records", default_handler=str))
+        for rec in records:
+            rec["is_potentially_taxable"] = rec.get("is_potentially_taxable") == "yes"
+        raw_summary = tax_summary(df, address)
+        body = json.dumps(
+            {
+                "meta": {
+                    "address": address,
+                    "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "disclaimer": TAX_DISCLAIMER,
+                },
+                "summary": {k: str(v) for k, v in raw_summary.items()},
+                "yearly": yearly_summary(df),
+                "transactions": records,
+            },
+            indent=2,
+            default=lambda v: str(v) if isinstance(v, Decimal) else v,
+        )
+        return Response(
+            body,
+            mimetype="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="{address[:8]}_tax.json"',
+            },
+        )
+
+    @app.get("/wallet/<address>/tax-summary.csv")
+    def tax_summary_csv_route(address: str) -> Response:
+        df = _unfiltered_or_404(address)
+        export = tax_yearly_export_frame(df)
+        buf = io.StringIO()
+        export.to_csv(buf, index=False)
+        return Response(
+            buf.getvalue(),
+            mimetype="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{address[:8]}_tax_yearly.csv"',
+            },
+        )
+
 
 def _cache_root() -> Path:
     return current_app.config["AI_ACCOUNTANT_CACHE_ROOT"]
@@ -199,6 +279,20 @@ def _filtered_or_404(address: str) -> pd.DataFrame:
     df, _meta = cached
     spec = FilterSpec.from_querystring(request.args)
     return spec.apply(df) if not df.empty else df
+
+
+def _unfiltered_or_404(address: str) -> pd.DataFrame:
+    """Read the full cached DataFrame, abort 404 if missing."""
+    if not ADDR_RE.match(address):
+        abort(404)
+    try:
+        cached = cache_mod.read(address, cache_root=_cache_root())
+    except InvalidSolanaAddressError:
+        abort(404)
+    if cached is None:
+        abort(404)
+    df, _ = cached
+    return df
 
 
 def _render_error(exc: DashboardError) -> str:
