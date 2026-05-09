@@ -162,6 +162,27 @@ class ExplainRowTests(unittest.TestCase):
         self.assertEqual(exp.review_label, "Needs review")
         self.assertIn("low_confidence", exp.tags)
 
+    def test_unstaked_sol(self):
+        row = _base_row(
+            tag_type="Stake/Unstake", tag_protocol="Marinade", source="MARINADE",
+            native_net_sol=Decimal("5.0"), tag_confidence=0.95,
+        )
+        exp = explain_row(row)
+        self.assertEqual(exp.event_title, "Unstaked SOL")
+        self.assertEqual(exp.review_label, "No action needed")
+        self.assertIn("staking", exp.tags)
+
+    def test_failed_swap_expanded_explanation_omits_tax_disclaimer(self):
+        row = _base_row(
+            tag_type="Swap", tag_protocol="Jupiter", source="JUPITER",
+            tag_assets="SOL → USDC", tag_confidence=0.95,
+            native_net_sol=Decimal("-1.0"), status="failed",
+        )
+        exp = explain_row(row)
+        self.assertEqual(exp.review_label, "Failed transaction")
+        self.assertNotIn("tax", exp.expanded_explanation.lower().replace("tax_relevant", ""))
+        self.assertIn("failed", exp.expanded_explanation.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

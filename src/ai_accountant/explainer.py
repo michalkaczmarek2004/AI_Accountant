@@ -307,13 +307,16 @@ def _build_expanded_explanation(row: pd.Series, case: str) -> str:
     elif case == "swap":
         via = f" via {protocol}" if protocol not in ("Unknown", "") else ""
         parts.append(f"Your wallet exchanged assets{via}.")
-        parts.append(_TAX_DISCLAIMER)
+        if status != "failed":
+            parts.append(_TAX_DISCLAIMER)
     elif case == "nft_bought":
         parts.append("Your wallet paid for and received an NFT.")
-        parts.append(_TAX_DISCLAIMER)
+        if status != "failed":
+            parts.append(_TAX_DISCLAIMER)
     elif case == "nft_sold":
         parts.append("Your wallet transferred an NFT and received payment.")
-        parts.append(_TAX_DISCLAIMER)
+        if status != "failed":
+            parts.append(_TAX_DISCLAIMER)
     elif case == "nft_received":
         parts.append("Your wallet received an NFT. The source is not confirmed.")
         parts.append(
@@ -327,17 +330,20 @@ def _build_expanded_explanation(row: pd.Series, case: str) -> str:
         parts.append("Your wallet withdrew SOL from a staking position.")
     elif case == "airdrop":
         parts.append("Your wallet received tokens without sending payment.")
-        parts.append(_TAX_DISCLAIMER)
+        if status != "failed":
+            parts.append(_TAX_DISCLAIMER)
     elif case == "lp":
         parts.append("Your wallet deposited or withdrew assets from a liquidity pool.")
-        parts.append(_TAX_DISCLAIMER)
+        if status != "failed":
+            parts.append(_TAX_DISCLAIMER)
     elif case == "mint_burn":
         parts.append("A token creation or burn was detected in this transaction.")
     elif case == "bridge":
         parts.append("Assets were moved across blockchain networks via a bridge.")
     elif case == "perp":
         parts.append("A perpetual futures trade was recorded.")
-        parts.append(_TAX_DISCLAIMER)
+        if status != "failed":
+            parts.append(_TAX_DISCLAIMER)
     else:
         parts.append("The agent could not classify this transaction from the available data.")
         parts.append("Manual review is recommended before relying on it for records.")
