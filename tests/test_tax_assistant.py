@@ -20,6 +20,7 @@ from ai_accountant.tax_assistant import (
     _row_date,
     tax_category,
     tax_classification_rows,
+    tax_review_queue,
     tax_summary,
 )
 
@@ -309,6 +310,80 @@ class TaxClassificationRowsTests(unittest.TestCase):
         result = tax_classification_rows(df)
         income_row = next(r for r in result if r["category"] == "Income")
         self.assertIsInstance(income_row["sol_net"], str)
+
+
+class TaxReviewQueueTests(unittest.TestCase):
+    def test_empty_df_returns_empty(self):
+        df = pd.DataFrame(columns=DATAFRAME_COLUMNS)
+        self.assertEqual(tax_review_queue(df), [])
+
+    def test_swap_appears_in_queue(self):
+        rows = [_row(tag_type="Swap")]
+        df = pd.DataFrame(rows)
+        result = tax_review_queue(df)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["category"], "Swap")
+
+    def test_small_income_not_in_queue(self):
+        rows = [_row(
+            tag_type="Transfer",
+            native_net_sol=Decimal("0.1"),
+            source="JUPITER",
+            tag_protocol="Jupiter",
+        )]
+        df = pd.DataFrame(rows)
+        self.assertEqual(tax_review_queue(df), [])
+
+    def test_unknown_tier_1_sorted_before_swap_tier_2(self):
+        rows = [
+            _row(tag_type="Swap", timestamp_unix=2000),
+            _row(tag_type=None, timestamp_unix=1000),
+        ]
+        df = pd.DataFrame(rows)
+        result = tax_review_queue(df)
+        self.assertEqual(result[0]["category"], "Unknown / Needs review")
+        self.assertEqual(result[1]["category"], "Swap")
+
+    def test_within_same_tier_sorted_by_timestamp_descending(self):
+        rows = [
+            _row(tag_type="Swap", timestamp_unix=1000, signature="A" * 87),
+            _row(tag_type="Swap", timestamp_unix=2000, signature="B" * 87),
+        ]
+        df = pd.DataFrame(rows)
+        result = tax_review_queue(df)
+        self.assertEqual(result[0]["signature"], "B" * 87)
+
+    def test_limit_caps_results(self):
+        rows = [_row(tag_type="Swap") for _ in range(5)]
+        df = pd.DataFrame(rows)
+        result = tax_review_queue(df, limit=3)
+        self.assertEqual(len(result), 3)
+
+    def test_result_has_required_keys(self):
+        rows = [_row(tag_type="Swap")]
+        df = pd.DataFrame(rows)
+        item = tax_review_queue(df)[0]
+        for key in (
+            "date", "signature", "sig_short", "category", "sol_net",
+            "short_explanation", "known_facts", "unknown_facts",
+            "suggested_actions", "expanded_explanation", "review_label",
+            "status", "source", "tag_protocol", "tier",
+        ):
+            self.assertIn(key, item, msg=f"missing key: {key}")
+
+    def test_large_income_is_in_queue_at_tier_6(self):
+        rows = [_row(tag_type="Transfer", native_net_sol=Decimal("1.0"))]
+        df = pd.DataFrame(rows)
+        result = tax_review_queue(df)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["tier"], 6)
+
+    def test_sig_short_is_truncated(self):
+        rows = [_row(tag_type="Swap", signature="A" * 87)]
+        df = pd.DataFrame(rows)
+        item = tax_review_queue(df)[0]
+        self.assertTrue(item["sig_short"].endswith("…"))
+        self.assertLessEqual(len(item["sig_short"]), 10)
 
 
 if __name__ == "__main__":

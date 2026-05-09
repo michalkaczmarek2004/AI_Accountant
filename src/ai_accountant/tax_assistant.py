@@ -167,6 +167,48 @@ def tax_summary(df: pd.DataFrame, address: str) -> dict[str, Any]:
     }
 
 
+def tax_review_queue(df: pd.DataFrame, *, limit: int = 100) -> list[dict]:
+    """Return priority-sorted review queue items, each enriched with explain_row() output."""
+    from .explainer import explain_row
+
+    if df.empty:
+        return []
+
+    qualified: list[tuple[int, int, dict]] = []
+
+    for _, row in df.iterrows():
+        cat = tax_category(row)
+        tier = _review_tier(row, cat)
+        if tier is None:
+            continue
+
+        exp = explain_row(row)
+        ts = int(row.get("timestamp_unix") or 0)
+        sig = _safe_str(row.get("signature"), "")
+
+        item = {
+            "date": _row_date(row),
+            "signature": sig,
+            "sig_short": (sig[:8] + "…") if len(sig) > 8 else sig,
+            "category": cat,
+            "sol_net": _fmt(_safe_decimal(row.get("native_net_sol")), signed=True),
+            "short_explanation": exp.short_explanation,
+            "known_facts": exp.known_facts,
+            "unknown_facts": exp.unknown_facts,
+            "suggested_actions": exp.suggested_actions,
+            "expanded_explanation": exp.expanded_explanation,
+            "review_label": exp.review_label,
+            "status": _safe_str(row.get("status"), ""),
+            "source": _safe_str(row.get("source"), ""),
+            "tag_protocol": _safe_str(row.get("tag_protocol"), ""),
+            "tier": tier,
+        }
+        qualified.append((tier, -ts, item))
+
+    qualified.sort(key=lambda x: (x[0], x[1]))
+    return [item for _, _, item in qualified[:limit]]
+
+
 def tax_classification_rows(df: pd.DataFrame) -> list[dict]:
     """Return one dict per tax category present, sorted by count (Unknown always last)."""
     if df.empty:
