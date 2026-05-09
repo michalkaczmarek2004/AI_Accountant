@@ -348,9 +348,9 @@ def _kpi_grid(metrics: Mapping[str, str]) -> str:
         ("Transactions", metrics["total"]),
         ("Succeeded", metrics["succeeded"]),
         ("Failed", metrics["failed"]),
-        ("Sources", metrics["sources"]),
-        ("Wallet fees", metrics["fee_wallet"]),
-        ("All parsed fees", metrics["fee_total"]),
+        ("Unique counterparties", metrics["sources"]),
+        ("Fees paid by this wallet", metrics["fee_wallet"]),
+        ("Total network fees observed", metrics["fee_total"]),
     ]
     body = "\n".join(
         f'<article class="kpi"><span>{escape(label)}</span><strong>{escape(value)}</strong></article>'

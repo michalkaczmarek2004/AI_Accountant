@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import sys
 import time
 import unittest
@@ -16,7 +15,6 @@ from ai_accountant import (
     HeliusRateLimitError,
     InvalidSolanaAddressError,
 )
-from ai_accountant.dashboard import cache as cache_mod
 from ai_accountant.dashboard.fetcher import (
     DashboardError,
     RefreshLocked,
@@ -27,7 +25,9 @@ WALLET = "86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY"
 
 
 class _FakeFetcher:
-    def __init__(self, *, df: pd.DataFrame | None = None, raises: BaseException | None = None) -> None:
+    def __init__(
+        self, *, df: pd.DataFrame | None = None, raises: BaseException | None = None
+    ) -> None:
         self.df = df if df is not None else pd.DataFrame(columns=DATAFRAME_COLUMNS)
         self.raises = raises
         self.calls = 0

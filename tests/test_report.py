@@ -7,7 +7,6 @@ from unittest.mock import patch
 from ai_accountant import SolanaDataFetcher
 from ai_accountant.report import EXPORT_COLUMNS, render_html_report, transaction_export_frame
 
-
 WALLET = "86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY"
 OTHER = "ExternalCounterparty111111111111111111111111111"
 

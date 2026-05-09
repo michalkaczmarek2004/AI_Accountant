@@ -27,7 +27,7 @@
         <td><a href="{{ url_for('wallet_page_route', address=w.address) }}"><code>{{ w.address[:8] }}…{{ w.address[-6:] }}</code></a></td>
         <td>{{ w.row_count }}</td>
         <td>{{ w.earliest_tx or '—' }} → {{ w.latest_tx or '—' }}</td>
-        <td>{{ w.fetched_at }}</td>
+        <td>{{ w.fetched_at[:16] | replace('T', ' ') }} UTC</td>
         <td>
           <form method="post" action="{{ url_for('forget_route', address=w.address) }}" style="display:inline">
             <button type="submit" class="link-button" title="Forget cache">⌫</button>

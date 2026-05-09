@@ -32,14 +32,23 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Start the AI Accountant dashboard.")
     p.add_argument("--api-key", default=None, help="Helius API key (or set HELIUS_API_KEY)")
     p.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"Port (default {DEFAULT_PORT})")
-    p.add_argument("--max-pages", type=int, default=DEFAULT_MAX_PAGES,
-                   help=f"Max Helius pages per fetch (default {DEFAULT_MAX_PAGES}, 0 = unlimited)")
-    p.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR,
-                   help="Directory for cached wallet data")
-    p.add_argument("--wallet", default=None,
-                   help="Optional wallet address to pre-fetch before opening the browser")
-    p.add_argument("--no-browser", action="store_true",
-                   help="Start server without opening the browser")
+    p.add_argument(
+        "--max-pages",
+        type=int,
+        default=DEFAULT_MAX_PAGES,
+        help=f"Max Helius pages per fetch (default {DEFAULT_MAX_PAGES}, 0 = unlimited)",
+    )
+    p.add_argument(
+        "--cache-dir", type=Path, default=DEFAULT_CACHE_DIR, help="Directory for cached wallet data"
+    )
+    p.add_argument(
+        "--wallet",
+        default=None,
+        help="Optional wallet address to pre-fetch before opening the browser",
+    )
+    p.add_argument(
+        "--no-browser", action="store_true", help="Start server without opening the browser"
+    )
     return p.parse_args()
 
 
@@ -72,8 +81,7 @@ def main() -> None:
         from ai_accountant.dashboard.server import create_app
     except ImportError:
         print(
-            "Error: dashboard dependencies not installed.\n"
-            '  Run: pip install -e ".[dashboard]"',
+            'Error: dashboard dependencies not installed.\n  Run: pip install -e ".[dashboard]"',
             file=sys.stderr,
         )
         sys.exit(1)

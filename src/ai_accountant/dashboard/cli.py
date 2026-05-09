@@ -38,7 +38,9 @@ def _build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--max-pages", type=int, default=DEFAULT_MAX_PAGES)
     serve.add_argument("--cache-dir", default=DEFAULT_CACHE_DIR)
 
-    fetch = sub.add_parser("fetch", help="Fetch one wallet into the cache without starting a server.")
+    fetch = sub.add_parser(
+        "fetch", help="Fetch one wallet into the cache without starting a server."
+    )
     fetch.add_argument("address")
     fetch.add_argument("--api-key", default=None)
     fetch.add_argument("--max-pages", type=int, default=DEFAULT_MAX_PAGES)
@@ -107,7 +109,9 @@ def _run_serve(args: argparse.Namespace) -> int:
     return 0
 
 
-def _run_fetch(args: argparse.Namespace, *, fetcher_factory: Callable[[], Any] | None = None) -> int:
+def _run_fetch(
+    args: argparse.Namespace, *, fetcher_factory: Callable[[], Any] | None = None
+) -> int:
     api_key = _resolve_api_key(args)
     if not api_key:
         print(

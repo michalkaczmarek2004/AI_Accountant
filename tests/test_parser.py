@@ -277,22 +277,29 @@ def _minimal_tx(**overrides):
 
 class ProgramIdsParserTests(unittest.TestCase):
     def test_extracts_program_ids_in_order(self) -> None:
-        tx = _minimal_tx(instructions=[
-            {"programId": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"},
-            {"programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},
-        ])
+        tx = _minimal_tx(
+            instructions=[
+                {"programId": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"},
+                {"programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},
+            ]
+        )
         row = TransactionParser("86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY").parse(tx)
-        self.assertEqual(row["program_ids"], [
-            "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
-            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-        ])
+        self.assertEqual(
+            row["program_ids"],
+            [
+                "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+                "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+            ],
+        )
 
     def test_deduplicates_program_ids_preserving_order(self) -> None:
-        tx = _minimal_tx(instructions=[
-            {"programId": "AAA111"},
-            {"programId": "BBB222"},
-            {"programId": "AAA111"},
-        ])
+        tx = _minimal_tx(
+            instructions=[
+                {"programId": "AAA111"},
+                {"programId": "BBB222"},
+                {"programId": "AAA111"},
+            ]
+        )
         row = TransactionParser("86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY").parse(tx)
         self.assertEqual(row["program_ids"], ["AAA111", "BBB222"])
 

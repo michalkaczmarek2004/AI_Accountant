@@ -1,0 +1,11 @@
+{
+  "address": "5ECZapYz2xd5ynfjuGDMiLnVsaixockpC4kEUkziECoJ",
+  "ai_accountant_version": "0.1.0",
+  "earliest_tx": "2026-05-08",
+  "fetched_at": "2026-05-08T22:39:14Z",
+  "latest_tx": "2026-05-08",
+  "max_pages_at_fetch": 5,
+  "pages_fetched": 5,
+  "row_count": 1,
+  "schema_version": 2
+}

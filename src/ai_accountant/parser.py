@@ -89,11 +89,13 @@ class TransactionParser:
             "raw_native_transfers": list(transaction.get("nativeTransfers") or []),
             "raw_token_transfers": list(transaction.get("tokenTransfers") or []),
             "transaction_error": raw_error,
-            "program_ids": list(dict.fromkeys(
-                str(ix.get("programId"))
-                for ix in (transaction.get("instructions") or [])
-                if ix.get("programId")
-            )),
+            "program_ids": list(
+                dict.fromkeys(
+                    str(ix.get("programId"))
+                    for ix in (transaction.get("instructions") or [])
+                    if ix.get("programId")
+                )
+            ),
         }
 
     def parse_many(

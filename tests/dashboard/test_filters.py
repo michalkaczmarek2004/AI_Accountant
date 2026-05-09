@@ -189,20 +189,24 @@ class FilterSpecTagTypeTests(unittest.TestCase):
         self.assertIn("tag=Swap", spec.to_querystring())
 
     def test_apply_tag_type_filter(self) -> None:
-        df = _df_with([
-            {"signature": "a", "tag_type": "Swap"},
-            {"signature": "b", "tag_type": "Transfer"},
-            {"signature": "c", "tag_type": "Swap"},
-        ])
+        df = _df_with(
+            [
+                {"signature": "a", "tag_type": "Swap"},
+                {"signature": "b", "tag_type": "Transfer"},
+                {"signature": "c", "tag_type": "Swap"},
+            ]
+        )
         spec = FilterSpec.from_querystring({"tag": "Swap"})
         out = spec.apply(df)
         self.assertEqual(sorted(out["signature"].tolist()), ["a", "c"])
 
     def test_apply_tag_type_case_insensitive(self) -> None:
-        df = _df_with([
-            {"signature": "a", "tag_type": "Swap"},
-            {"signature": "b", "tag_type": "Transfer"},
-        ])
+        df = _df_with(
+            [
+                {"signature": "a", "tag_type": "Swap"},
+                {"signature": "b", "tag_type": "Transfer"},
+            ]
+        )
         spec = FilterSpec.from_querystring({"tag": "swap"})
         out = spec.apply(df)
         self.assertEqual(out["signature"].tolist(), ["a"])

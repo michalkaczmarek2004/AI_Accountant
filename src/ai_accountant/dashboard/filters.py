@@ -98,10 +98,10 @@ class FilterSpec:
 
         if self.date_from is not None:
             cutoff = int(datetime.combine(self.date_from, time.min, timezone.utc).timestamp())
-            mask &= df["timestamp_unix"].fillna(0).astype("int64") >= cutoff
+            mask &= pd.to_numeric(df["timestamp_unix"], errors="coerce").fillna(0).astype("int64") >= cutoff
         if self.date_to is not None:
             cutoff = int(datetime.combine(self.date_to, time.max, timezone.utc).timestamp())
-            mask &= df["timestamp_unix"].fillna(0).astype("int64") <= cutoff
+            mask &= pd.to_numeric(df["timestamp_unix"], errors="coerce").fillna(0).astype("int64") <= cutoff
         if self.status is not None:
             mask &= df["status"] == self.status
         if self.type is not None:

@@ -169,9 +169,7 @@ def render_bar_svg(
     )
 
 
-def _decimate(
-    points: list[tuple[date, Decimal]], *, max_points: int
-) -> list[tuple[date, Decimal]]:
+def _decimate(points: list[tuple[date, Decimal]], *, max_points: int) -> list[tuple[date, Decimal]]:
     if len(points) <= max_points:
         return points
     step = len(points) / max_points
