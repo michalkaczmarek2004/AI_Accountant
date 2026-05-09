@@ -186,6 +186,9 @@ class UtilityHelperTests(unittest.TestCase):
     def test_fmt_signed_negative(self):
         self.assertEqual(_fmt(Decimal("-1.5"), signed=True), "-1.5")
 
+    def test_fmt_integer_decimal_not_corrupted(self):
+        self.assertEqual(_fmt(Decimal("100")), "100")
+
 
 if __name__ == "__main__":
     unittest.main()

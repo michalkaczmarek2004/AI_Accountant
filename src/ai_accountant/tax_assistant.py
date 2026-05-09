@@ -1,10 +1,8 @@
 """Tax classification and aggregation for the Tax Assistant dashboard module."""
 from __future__ import annotations
 
-import math
 from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
-from typing import Any
+from decimal import Decimal
 
 import pandas as pd
 
@@ -114,6 +112,8 @@ def _fmt(d: Decimal, *, signed: bool = False) -> str:
         return "+0" if signed else "0"
     try:
         s = f"{d:+f}" if signed else f"{d:f}"
-        return s.rstrip("0").rstrip(".")
+        if "." in s:
+            s = s.rstrip("0").rstrip(".")
+        return s
     except Exception:
         return "+0" if signed else "0"
