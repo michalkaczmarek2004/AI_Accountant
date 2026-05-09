@@ -20,8 +20,11 @@ from ai_accountant.tax_assistant import (
     _row_date,
     tax_category,
     tax_classification_rows,
+    tax_export_frame,
     tax_review_queue,
     tax_summary,
+    tax_yearly_export_frame,
+    yearly_summary,
 )
 
 
@@ -384,6 +387,108 @@ class TaxReviewQueueTests(unittest.TestCase):
         item = tax_review_queue(df)[0]
         self.assertTrue(item["sig_short"].endswith("…"))
         self.assertLessEqual(len(item["sig_short"]), 10)
+
+
+class YearlySummaryTests(unittest.TestCase):
+    def test_empty_df_returns_empty(self):
+        df = pd.DataFrame(columns=DATAFRAME_COLUMNS)
+        self.assertEqual(yearly_summary(df), [])
+
+    def test_groups_by_year(self):
+        rows = [
+            _row(tag_type="Transfer", native_net_sol=Decimal("1.0"), timestamp_unix=1700000000),
+            _row(tag_type="Transfer", native_net_sol=Decimal("2.0"), timestamp_unix=1735689600),
+        ]
+        df = pd.DataFrame(rows)
+        result = yearly_summary(df)
+        years = [r["year"] for r in result]
+        self.assertEqual(len(set(years)), 2)
+
+    def test_sorted_year_descending(self):
+        rows = [
+            _row(tag_type="Transfer", native_net_sol=Decimal("1.0"), timestamp_unix=1700000000),
+            _row(tag_type="Transfer", native_net_sol=Decimal("2.0"), timestamp_unix=1735689600),
+        ]
+        df = pd.DataFrame(rows)
+        result = yearly_summary(df)
+        self.assertGreater(result[0]["year"], result[1]["year"])
+
+    def test_failed_excluded_from_aggregates(self):
+        rows = [
+            _row(tag_type="Transfer", native_net_sol=Decimal("1.0"), timestamp_unix=1735689600),
+            _row(tag_type="Transfer", native_net_sol=Decimal("5.0"), timestamp_unix=1735689600, status="failed"),
+        ]
+        df = pd.DataFrame(rows)
+        result = yearly_summary(df)
+        self.assertEqual(len(result), 1)
+        self.assertNotIn("5", result[0]["income_sol"])
+
+    def test_result_keys(self):
+        rows = [_row(tag_type="Swap", timestamp_unix=1735689600)]
+        df = pd.DataFrame(rows)
+        result = yearly_summary(df)
+        for key in ("year", "income_sol", "expense_sol", "fees_sol", "taxable_count"):
+            self.assertIn(key, result[0])
+
+
+class TaxExportFrameTests(unittest.TestCase):
+    EXPECTED_COLUMNS = [
+        "date", "signature", "status", "tax_category", "case_key", "tag_type",
+        "sol_net", "token_summary", "fee_sol", "is_potentially_taxable",
+        "review_label", "notes",
+    ]
+
+    def test_empty_df_returns_correct_columns(self):
+        df = pd.DataFrame(columns=DATAFRAME_COLUMNS)
+        result = tax_export_frame(df)
+        self.assertEqual(list(result.columns), self.EXPECTED_COLUMNS)
+        self.assertEqual(len(result), 0)
+
+    def test_case_key_and_tag_type_both_present(self):
+        rows = [_row(tag_type="Swap")]
+        df = pd.DataFrame(rows)
+        result = tax_export_frame(df)
+        self.assertEqual(result["case_key"].iloc[0], "swap")
+        self.assertEqual(result["tag_type"].iloc[0], "Swap")
+
+    def test_is_potentially_taxable_values(self):
+        rows = [
+            _row(tag_type="Swap"),
+            _row(tag_type="Transfer", native_net_sol=Decimal("0.1")),
+        ]
+        df = pd.DataFrame(rows)
+        result = tax_export_frame(df)
+        vals = set(result["is_potentially_taxable"].tolist())
+        self.assertIn("yes", vals)
+        self.assertIn("no", vals)
+
+    def test_notes_truncated_to_200_chars(self):
+        rows = [_row(tag_type="Swap")]
+        df = pd.DataFrame(rows)
+        result = tax_export_frame(df)
+        self.assertLessEqual(len(result["notes"].iloc[0]), 200)
+
+    def test_unknown_category_is_not_taxable(self):
+        rows = [_row(tag_type=None)]
+        df = pd.DataFrame(rows)
+        result = tax_export_frame(df)
+        self.assertEqual(result["is_potentially_taxable"].iloc[0], "no")
+
+
+class TaxYearlyExportFrameTests(unittest.TestCase):
+    def test_empty_df_returns_correct_columns(self):
+        df = pd.DataFrame(columns=DATAFRAME_COLUMNS)
+        result = tax_yearly_export_frame(df)
+        self.assertEqual(
+            list(result.columns),
+            ["year", "income_sol", "expense_sol", "fees_sol", "potentially_taxable_count"],
+        )
+
+    def test_non_empty_df_has_rows(self):
+        rows = [_row(tag_type="Swap", timestamp_unix=1735689600)]
+        df = pd.DataFrame(rows)
+        result = tax_yearly_export_frame(df)
+        self.assertGreater(len(result), 0)
 
 
 if __name__ == "__main__":

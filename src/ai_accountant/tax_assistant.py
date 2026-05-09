@@ -248,3 +248,115 @@ def tax_classification_rows(df: pd.DataFrame) -> list[dict]:
         })
 
     return rows
+
+
+def yearly_summary(df: pd.DataFrame) -> list[dict]:
+    """Return per-year tax aggregates, sorted year descending."""
+    if df.empty:
+        return []
+
+    years: dict[int, dict] = {}
+    for _, row in df.iterrows():
+        ts = row.get("timestamp_unix")
+        if ts is None:
+            continue
+        try:
+            year = datetime.fromtimestamp(int(ts), timezone.utc).year
+        except (OSError, TypeError, ValueError):
+            continue
+        if _safe_str(row.get("status"), "") != "succeeded":
+            continue
+
+        cat = tax_category(row)
+        net = _safe_decimal(row.get("native_net_sol"))
+
+        if year not in years:
+            years[year] = {
+                "year": year,
+                "_income": Decimal("0"),
+                "_expense": Decimal("0"),
+                "_fees": Decimal("0"),
+                "taxable_count": 0,
+            }
+        if cat == "Income":
+            years[year]["_income"] += net
+        elif cat == "Expense":
+            years[year]["_expense"] += net.copy_abs()
+        if cat in TAXABLE_CATEGORIES:
+            years[year]["taxable_count"] += 1
+        if bool(row.get("fee_paid_by_wallet")):
+            years[year]["_fees"] += _safe_decimal(row.get("fee_sol"))
+
+    result = []
+    for data in sorted(years.values(), key=lambda r: r["year"], reverse=True):
+        result.append({
+            "year": data["year"],
+            "income_sol": _fmt(data["_income"], signed=True),
+            "expense_sol": _fmt(data["_expense"]),
+            "fees_sol": _fmt(data["_fees"]),
+            "taxable_count": data["taxable_count"],
+        })
+    return result
+
+
+_TAX_EXPORT_COLUMNS = [
+    "date", "signature", "status", "tax_category", "case_key", "tag_type",
+    "sol_net", "token_summary", "fee_sol", "is_potentially_taxable",
+    "review_label", "notes",
+]
+
+
+_EXPORT_TAXABLE: frozenset[str] = TAXABLE_CATEGORIES & REVIEW_REQUIRED_CATEGORIES
+
+
+def tax_export_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a flat DataFrame suitable for CSV export with full traceability columns."""
+    from .explainer import explain_row
+
+    if df.empty:
+        return pd.DataFrame(columns=_TAX_EXPORT_COLUMNS)
+
+    sorted_df = df.sort_values("timestamp_unix", ascending=False, kind="stable").reset_index(drop=True)
+    rows = []
+    for _, row in sorted_df.iterrows():
+        case = _classify(row)
+        cat = _CASE_TO_CATEGORY.get(case, "Unknown / Needs review")
+        exp = explain_row(row)
+        rows.append({
+            "date": _row_date(row),
+            "signature": _safe_str(row.get("signature"), ""),
+            "status": _safe_str(row.get("status"), ""),
+            "tax_category": cat,
+            "case_key": case,
+            "tag_type": _safe_str(row.get("tag_type"), ""),
+            "sol_net": _fmt(_safe_decimal(row.get("native_net_sol")), signed=True),
+            "token_summary": _safe_str(row.get("net_flow_summary"), ""),
+            "fee_sol": _fmt(_safe_decimal(row.get("fee_sol"))),
+            "is_potentially_taxable": "yes" if cat in _EXPORT_TAXABLE else "no",
+            "review_label": exp.review_label,
+            "notes": exp.short_explanation[:200],
+        })
+    return pd.DataFrame(rows, columns=_TAX_EXPORT_COLUMNS)
+
+
+_YEARLY_EXPORT_COLUMNS = [
+    "year", "income_sol", "expense_sol", "fees_sol", "potentially_taxable_count",
+]
+
+
+def tax_yearly_export_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Return yearly_summary() as a flat DataFrame for CSV export."""
+    if df.empty:
+        return pd.DataFrame(columns=_YEARLY_EXPORT_COLUMNS)
+
+    rows = [
+        {
+            "year": ys["year"],
+            "income_sol": ys["income_sol"],
+            "expense_sol": ys["expense_sol"],
+            "fees_sol": ys["fees_sol"],
+            "potentially_taxable_count": ys["taxable_count"],
+        }
+        for ys in yearly_summary(df)
+    ]
+    return pd.DataFrame(rows, columns=_YEARLY_EXPORT_COLUMNS)
