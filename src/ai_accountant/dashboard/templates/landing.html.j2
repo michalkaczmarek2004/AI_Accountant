@@ -2,8 +2,32 @@
 {% block title %}AI Accountant — Dashboard{% endblock %}
 {% block body %}
 <section class="hero">
-  <h1>Wallet activity dashboard</h1>
-  <p class="lead">Server-cached, filterable, exportable. Paste a Solana wallet address to begin.</p>
+  <p class="eyebrow">Solana Colosseum demo</p>
+  <h1>AI Accountant for US Crypto Taxes</h1>
+  <p class="lead">Classify Solana transactions, detect taxable events, find missing cost basis, and generate a CPA-ready review package.</p>
+  <div class="hero-actions">
+    <form method="post" action="{{ url_for('demo_route') }}">
+      <button type="submit" class="primary">Run US Tax Demo</button>
+    </form>
+    <form method="post" action="{{ url_for('demo_route') }}">
+      <button type="submit" class="secondary">View Sample Tax File</button>
+    </form>
+  </div>
+</section>
+
+<section class="proof-grid">
+  <article>
+    <strong>Taxable event detection</strong>
+    <span>Jupiter swaps, NFT sales, staking rewards, airdrops, and stablecoin exchanges are separated from support records.</span>
+  </article>
+  <article>
+    <strong>Missing basis review</strong>
+    <span>AI Accountant flags external wallet inflows, missing FMV, and lots that require CPA or taxpayer answers.</span>
+  </article>
+  <article>
+    <strong>CPA-ready export</strong>
+    <span>Draft Form 8949 fields, Schedule D summary inputs, review items, audit trail, and confidence scores stay traceable.</span>
+  </article>
 </section>
 
 <section class="paste-form">
@@ -11,26 +35,57 @@
     <label for="address">Solana wallet address</label>
     <input type="text" id="address" name="address" value="{{ address_input or '' }}"
            placeholder="86xCnPeV…" autocomplete="off" required>
-    <button type="submit">Open</button>
+    <button type="submit">Open Dashboard</button>
     {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
   </form>
+  <p class="muted">Wallet dashboard remains available for raw Solana activity review. The competition demo should start with Run US Tax Demo.</p>
 </section>
 
+<section class="report-section">
+  <div class="section-heading">
+    <div>
+      <h2>How It Works</h2>
+      <p class="muted">Presenter-ready answers for the most likely product and tax questions.</p>
+    </div>
+  </div>
+  <div class="faq-grid">
+    <article><strong>Is this real AI or rules?</strong><span>Classification is deterministic for auditability, with an AI explanation layer for user guidance, review prioritization, and CPA-ready summaries.</span></article>
+    <article><strong>Can it file taxes?</strong><span>No. It prepares a CPA-ready draft package. Final filing requires taxpayer/CPA review.</span></article>
+    <article><strong>How do you avoid wrong tax advice?</strong><span>Confidence scores, review blockers, missing data flags, audit trail, and explicit non-advice disclaimers.</span></article>
+    <article><strong>Why Solana-specific?</strong><span>Solana wallet parsing, staking rewards, Jupiter swaps, SPL tokens, NFT patterns, fees, and self-transfer matching.</span></article>
+    <article><strong>Why not a portfolio tracker?</strong><span>A tracker shows balances. AI Accountant classifies taxable events, detects cost basis gaps, explains tax impact, and prepares exportable tax records.</span></article>
+  </div>
+</section>
+
+{% if notice %}
+<section class="notice-panel"><p>{{ notice }}</p></section>
+{% endif %}
+
 <section class="recent">
-  <h2>Recent wallets</h2>
+  <div class="section-heading">
+    <div>
+      <h2>Recent wallets</h2>
+      <p class="muted">Open a cached wallet dashboard or forget local cached data.</p>
+    </div>
+    <a class="button secondary" href="{{ url_for('tax_files_route') }}">Manage Tax Files</a>
+  </div>
   {% if wallets %}
   <table>
-    <thead><tr><th>Address</th><th>Transactions</th><th>Range</th><th>Fetched</th><th></th></tr></thead>
+    <thead><tr><th>Address</th><th>Transactions</th><th>Range</th><th>Fetched</th><th>Actions</th></tr></thead>
     <tbody>
       {% for w in wallets %}
       <tr>
-        <td><a href="{{ url_for('wallet_page_route', address=w.address) }}"><code>{{ w.address[:8] }}…{{ w.address[-6:] }}</code></a></td>
+        <td>
+          <a href="{{ url_for('wallet_page_route', address=w.address) }}"><code>{{ w.address[:8] }}…{{ w.address[-6:] }}</code></a>
+          {% if w.dataset_label %}<span class="muted">{{ w.dataset_label }}</span>{% endif %}
+        </td>
         <td>{{ w.row_count }}</td>
         <td>{{ w.earliest_tx or '—' }} → {{ w.latest_tx or '—' }}</td>
         <td>{{ w.fetched_at[:16] | replace('T', ' ') }} UTC</td>
-        <td>
-          <form method="post" action="{{ url_for('forget_route', address=w.address) }}" style="display:inline">
-            <button type="submit" class="link-button" title="Forget cache">⌫</button>
+        <td class="row-actions">
+          <a class="button secondary" href="{{ url_for('wallet_page_route', address=w.address) }}">Open Dashboard</a>
+          <form method="post" action="{{ url_for('forget_route', address=w.address) }}" class="inline-form">
+            <button type="submit" class="link-button" title="Forget cache">Forget</button>
           </form>
         </td>
       </tr>

@@ -1,0 +1,93 @@
+{% extends "base.html.j2" %}
+{% block title %}Tax Files — AI Accountant{% endblock %}
+{% block body %}
+<section class="wallet-header">
+  <div>
+    <p class="eyebrow">Tax Files</p>
+    <h1>Tax Files</h1>
+    <p class="meta-line">Client-level accounting workspaces for connected Solana accounts.</p>
+  </div>
+  <div class="header-actions">
+    <a href="{{ url_for('landing') }}" class="button secondary">Wallets</a>
+    {% if show_archived %}
+    <a href="{{ url_for('tax_files_route') }}" class="button secondary">Hide archived</a>
+    {% else %}
+    <a href="{{ url_for('tax_files_route', show_archived='1') }}" class="button secondary">Show archived</a>
+    {% endif %}
+  </div>
+</section>
+
+{% if notice %}
+<section class="notice-panel"><p>{{ notice }}</p></section>
+{% endif %}
+
+<section class="paste-form">
+  <form method="post" action="{{ url_for('create_tax_file_route') }}" class="tax-file-create-form">
+    <label>Name
+      <input type="text" name="name" placeholder="Demo Client {{ tax_year_default }}" required>
+    </label>
+    <label>Tax year
+      <input type="number" name="tax_year" value="{{ tax_year_default }}" min="2009" max="2100">
+    </label>
+    <label>Tax country
+      <select name="tax_country">
+        {% for country in tax_country_options %}
+        <option value="{{ country.value }}" {% if country.value == tax_country_default %}selected{% endif %}>{{ country.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Entity type
+      <select name="entity_type">
+        <option value="{{ entity_type_default }}">{{ entity_type_default }}</option>
+        <option value="business">business</option>
+        <option value="trust">trust</option>
+      </select>
+    </label>
+    <button type="submit" class="primary">Create Tax File</button>
+  </form>
+</section>
+
+<section class="recent">
+  <h2>Tax Files</h2>
+  {% if tax_files %}
+  <table>
+    <thead>
+      <tr><th>Name</th><th>Tax year</th><th>Country</th><th>Entity</th><th>Accounts</th><th>Transactions</th><th>Tax readiness</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      {% for tax_file in tax_files %}
+      <tr>
+        <td>
+          <strong>{{ tax_file.name }}</strong>
+          <span class="muted">Updated {{ tax_file.updated_at[:16] | replace('T', ' ') }} UTC</span>
+          {% if tax_file.is_archived %}<span class="muted">Archived {{ tax_file.archived_at[:16] | replace('T', ' ') }} UTC</span>{% endif %}
+        </td>
+        <td>{{ tax_file.tax_year }}</td>
+        <td>{{ tax_file.tax_country }}</td>
+        <td>{{ tax_file.entity_type }}</td>
+        <td>{{ tax_file.accounts_count }}</td>
+        <td>{{ tax_file.transactions_count }}</td>
+        <td><mark class="{{ 'warning' if tax_file.tax_readiness not in ['Draft review', 'Archived'] else 'neutral' }}">{{ tax_file.tax_readiness }}</mark></td>
+        <td class="row-actions compact-actions">
+          <a class="button secondary" href="{{ url_for('tax_file_detail_route', tax_file_id=tax_file.id) }}">Open</a>
+          {% if not tax_file.is_archived %}
+          <details class="action-details">
+            <summary class="link-button">Archive</summary>
+            <form method="post" action="{{ url_for('archive_tax_file_route', tax_file_id=tax_file.id) }}" class="stacked-form" onsubmit="return confirm('Archive this Tax File? It will be hidden by default, but raw wallet data stays cached.');">
+              <label>Reason
+                <textarea name="note" required placeholder="Why is this Tax File being archived?"></textarea>
+              </label>
+              <button type="submit" class="danger">Archive Tax File</button>
+            </form>
+          </details>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No tax files yet. Create one, then link recent wallets as accounts.</p>
+  {% endif %}
+</section>
+{% endblock %}

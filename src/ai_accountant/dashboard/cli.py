@@ -23,6 +23,8 @@ def main(argv: list[str] | None = None, *, fetcher_factory: Callable[[], Any] | 
         return _run_serve(args)
     if args.command == "fetch":
         return _run_fetch(args, fetcher_factory=fetcher_factory)
+    if args.command == "demo":
+        return _run_demo(args)
     parser.print_help(sys.stderr)
     return 2
 
@@ -45,6 +47,9 @@ def _build_parser() -> argparse.ArgumentParser:
     fetch.add_argument("--api-key", default=None)
     fetch.add_argument("--max-pages", type=int, default=DEFAULT_MAX_PAGES)
     fetch.add_argument("--cache-dir", default=DEFAULT_CACHE_DIR)
+
+    demo = sub.add_parser("demo", help="Seed the cache with synthetic demo wallet data.")
+    demo.add_argument("--cache-dir", default=DEFAULT_CACHE_DIR)
     return parser
 
 
@@ -142,6 +147,24 @@ def _run_fetch(
         print(f"Fetch failed [{exc.category}]: {exc.message}", file=sys.stderr)
         return 1
     print(f"Fetched {len(df)} transactions for {args.address} (pages={meta['pages_fetched']}).")
+    return 0
+
+
+def _run_demo(args: argparse.Namespace) -> int:
+    cache_dir = Path(args.cache_dir).resolve()
+    rc = _ensure_cache_dir(cache_dir)
+    if rc is not None:
+        return rc
+
+    from . import cache as cache_mod
+    from .demo import TEST_DATASET_LABEL, build_test_cache_payloads
+    from .tax_files import create_test_tax_file
+
+    payloads = build_test_cache_payloads()
+    for address, df, meta in payloads:
+        cache_mod.write(address, df, meta, cache_root=cache_dir)
+    create_test_tax_file(cache_dir, primary_address=payloads[0][0], secondary_address=payloads[1][0])
+    print(f"Wrote {TEST_DATASET_LABEL}: {sum(len(df) for _, df, _ in payloads)} transactions across {len(payloads)} wallets.")
     return 0
 
 

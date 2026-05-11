@@ -12,6 +12,7 @@ build/
 .mypy_cache/
 .coverage
 htmlcov/
+.ai_accountant/
 *.stackdump
 .idea/
 .vscode/

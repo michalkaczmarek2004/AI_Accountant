@@ -11,8 +11,9 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from ai_accountant import DATAFRAME_COLUMNS
+from ai_accountant.dashboard.demo import DEMO_WALLET_ADDRESS, build_demo_dataframe, build_demo_meta
 from ai_accountant.dashboard.filters import FilterSpec
-from ai_accountant.dashboard.views import transaction_detail, wallet_page
+from ai_accountant.dashboard.views import tax_page, transaction_detail, wallet_page
 
 WALLET = "86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY"
 USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
@@ -157,6 +158,26 @@ class WalletPageTests(unittest.TestCase):
         self.assertIsInstance(exp.tags, list)
         self.assertIsInstance(exp.confidence_percent, int)
 
+    def test_transaction_mix_formats_percentages_and_readable_labels(self) -> None:
+        rows = [
+            _row(signature=f"swap-{i}", transaction_type="SWAP")
+            for i in range(3)
+        ]
+        rows.extend(
+            _row(signature=f"stake-{i}", transaction_type="STAKE")
+            for i in range(9)
+        )
+        rows.append(_row(signature="token-transfer", transaction_type="TOKEN_TRANSFER"))
+
+        ctx = wallet_page(_df(rows), spec=FilterSpec(), meta=_meta(), address=WALLET)
+        by_name = {row["name"]: row for row in ctx["transaction_mix"]}
+
+        self.assertEqual(by_name["Swap"]["pct"], "23.1")
+        self.assertEqual(by_name["Token transfer"]["pct"], "7.7")
+        rendered = repr(ctx["transaction_mix"])
+        self.assertNotIn("7.692307692307", rendered)
+        self.assertTrue(all(Decimal("0") <= Decimal(r["pct_width"]) <= Decimal("100") for r in ctx["transaction_mix"]))
+
 
 class TransactionDetailTests(unittest.TestCase):
     def test_returns_row_dict_for_known_signature(self) -> None:
@@ -216,6 +237,23 @@ class TransactionRowTagFieldsTests(unittest.TestCase):
         self.assertIn("Swap", tag_types)
         self.assertIn("Transfer", tag_types)
         self.assertEqual(tag_types, sorted(tag_types))
+
+
+class DemoDatasetDashboardTests(unittest.TestCase):
+    def test_demo_dataset_generates_non_empty_charts_and_tax_review_queue(self) -> None:
+        df = build_demo_dataframe()
+        wallet_ctx = wallet_page(
+            df,
+            spec=FilterSpec(),
+            meta=build_demo_meta(df),
+            address=DEMO_WALLET_ADDRESS,
+        )
+        self.assertIn("ai-chart-line", wallet_ctx["balance_chart_svg"])
+        self.assertIn("ai-chart-bar", wallet_ctx["activity_chart_svg"])
+
+        tax_ctx = tax_page(df, address=DEMO_WALLET_ADDRESS, meta=build_demo_meta(df))
+        self.assertFalse(tax_ctx["no_data"])
+        self.assertGreater(len(tax_ctx["review_queue"]), 0)
 
 
 if __name__ == "__main__":

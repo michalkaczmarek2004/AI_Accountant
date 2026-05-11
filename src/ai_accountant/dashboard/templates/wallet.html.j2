@@ -8,18 +8,20 @@
     {% if meta %}
     <p class="meta-line">
       {{ meta.row_count }} transactions • {{ meta.earliest_tx or '—' }} → {{ meta.latest_tx or '—' }} •
-      Last updated: {{ meta.fetched_at[:16] | replace('T', ' ') }} UTC • Pages: {{ meta.pages_fetched }}/{{ meta.max_pages_at_fetch or '∞' }}
+      Last updated: {{ meta.fetched_at[:16] | replace('T', ' ') }} UTC
+      {% if meta.dataset_label %} • {{ meta.dataset_label }}{% endif %}
     </p>
     {% else %}
     <p class="meta-line">No data cached for this wallet yet.</p>
     {% endif %}
+    <p class="muted">Wallet Dashboard shows raw Solana wallet activity. It helps identify transfers, swaps, staking, NFT activity, fees, and failed transactions. This is not a final tax report until the wallet is connected to a Tax File and reviewed.</p>
   </div>
   <div class="header-actions">
     <form method="post" action="{{ url_for('refresh_route', address=address) }}">
       <button type="submit" class="primary">{% if meta %}Refresh{% else %}Fetch{% endif %}</button>
     </form>
     {% if meta %}
-    <a href="{{ url_for('tax_page_route', address=address) }}" class="link-button">Tax Assistant</a>
+    <a href="{{ url_for('tax_country_page_route', address=address, tax_country='US') }}" class="button secondary">Tax Assistant</a>
     <form method="post" action="{{ url_for('forget_route', address=address) }}">
       <button type="submit" class="link-button">Forget</button>
     </form>
@@ -79,12 +81,12 @@
 </form>
 
 <section class="kpi-grid">
-  <article class="kpi"><span>Transactions {% if filter_active %}(filtered){% else %}(all time){% endif %}</span><strong>{{ kpis.total }}</strong></article>
-  <article class="kpi"><span>Succeeded</span><strong>{{ kpis.succeeded }}</strong></article>
-  <article class="kpi"><span>Failed</span><strong>{{ kpis.failed }}</strong></article>
+  <article class="kpi kpi-info"><span>Transactions {% if filter_active %}(filtered){% else %}(all time){% endif %}</span><strong>{{ kpis.total }}</strong></article>
+  <article class="kpi kpi-success"><span>Succeeded</span><strong>{{ kpis.succeeded }}</strong></article>
+  <article class="kpi kpi-error"><span>Failed</span><strong>{{ kpis.failed }}</strong></article>
   <article class="kpi"><span>Unique counterparties</span><strong>{{ kpis.sources }}</strong></article>
-  <article class="kpi"><span>Fees paid by this wallet</span><strong>{{ kpis.fee_wallet }}</strong></article>
-  <article class="kpi"><span>Total network fees observed</span><strong>{{ kpis.fee_total }}</strong></article>
+  <article class="kpi kpi-fee"><span>Fees paid by this wallet</span><strong>{{ kpis.fee_wallet }}</strong></article>
+  <article class="kpi kpi-fee"><span>Total network fees observed</span><strong>{{ kpis.fee_total }}</strong></article>
 </section>
 
 <section class="report-section">
@@ -106,7 +108,7 @@
     <tbody>
       {% for r in asset_flow %}
       <tr>
-        <td><strong>{{ r.asset }}</strong><span class="muted">{{ r.mint }}</span></td>
+        <td><strong>{{ r.asset }}</strong><span class="muted" title="{{ r.mint }}">{{ r.mint_short or r.mint }}</span></td>
         <td>{{ r.in }}</td>
         <td>{{ r.out }}</td>
         <td><mark class="{{ r.direction }}">{{ r.net }}</mark></td>
@@ -124,7 +126,7 @@
     {% for r in transaction_mix %}
     <div class="bar-row">
       <div class="bar-label"><strong>{{ r.name }}</strong><span class="muted">{{ r.count }} tx</span></div>
-      <div class="bar-track"><i style="width: {{ r.pct }}%"></i></div>
+      <div class="bar-track" title="{{ r.name }}: {{ r.pct }}%"><i style="--bar-width: {{ r.pct_width | default(r.pct) }}%"></i></div>
       <span class="bar-pct">{{ r.pct }}%</span>
     </div>
     {% endfor %}
@@ -144,7 +146,7 @@
         <td><strong>{{ r.title }}</strong><span class="muted">{{ r.detail }}</span></td>
         <td>
           {% if r.signature %}
-          <a href="{{ url_for('tx_detail_route', address=address, sig=r.signature) }}">{{ r.signature[:8] }}…</a>
+          <a href="{{ url_for('tx_detail_route', address=address, sig=r.signature) }}" title="{{ r.signature }}">{{ r.signature_short }}</a>
           {% endif %}
         </td>
       </tr>
@@ -172,7 +174,7 @@
         <span><strong>{{ exp.event_title }}</strong></span>
         <span>{{ r.tag_assets or r.tag_amount_display or '—' }}</span>
         <span><mark class="{{ r.status }}">{{ r.status }}</mark></span>
-        <span>{{ exp.review_label }}</span>
+        <span class="review-note">{{ exp.review_label }}</span>
       </summary>
       <div class="tx-expanded">
         <p>{{ exp.short_explanation }}</p>
@@ -192,7 +194,7 @@
         <p class="muted">{{ exp.expanded_explanation }}</p>
         {% endif %}
         <div class="tx-technical"><code>{{ exp.technical_summary }}</code></div>
-        <p><a href="{{ url_for('tx_detail_route', address=address, sig=r.signature) }}" class="muted">View raw details →</a></p>
+        <p><a href="{{ url_for('tx_detail_route', address=address, sig=r.signature) }}">View raw details</a></p>
       </div>
     </details>
     {% endfor %}
@@ -205,9 +207,19 @@
   {% else %}<p class="empty">No transactions match the current filter.</p>{% endif %}
 </section>
 
-<section class="export-bar">
-  <a href="{{ url_for('export_csv_route', address=address) }}?{{ filter.to_querystring() }}">Download CSV (filtered)</a>
-  <a href="{{ url_for('export_json_route', address=address) }}?{{ filter.to_querystring() }}">Download JSON (filtered)</a>
+<section class="export-panel">
+  <div>
+    <p class="eyebrow">Export</p>
+    <h2>Portfolio report</h2>
+    <p class="muted">PDF is formatted for review, accounting handoff and archive. CSV and JSON remain available for technical workflows.</p>
+  </div>
+  <div class="export-actions">
+    <a class="button primary export-primary" href="{{ url_for('export_pdf_route', address=address) }}{% if filter.to_querystring() %}?{{ filter.to_querystring() }}{% endif %}">Download PDF Report</a>
+  </div>
+  <div class="export-secondary">
+    <a href="{{ url_for('export_csv_route', address=address) }}{% if filter.to_querystring() %}?{{ filter.to_querystring() }}{% endif %}">Download CSV</a>
+    <a href="{{ url_for('export_json_route', address=address) }}{% if filter.to_querystring() %}?{{ filter.to_querystring() }}{% endif %}">Download advanced JSON</a>
+  </div>
 </section>
 
 {% endif %}
