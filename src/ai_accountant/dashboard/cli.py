@@ -157,11 +157,14 @@ def _run_demo(args: argparse.Namespace) -> int:
         return rc
 
     from . import cache as cache_mod
-    from .demo import DEMO_DATASET_LABEL, build_demo_cache_payload
+    from .demo import TEST_DATASET_LABEL, build_test_cache_payloads
+    from .tax_files import create_test_tax_file
 
-    address, df, meta = build_demo_cache_payload()
-    cache_mod.write(address, df, meta, cache_root=cache_dir)
-    print(f"Wrote {DEMO_DATASET_LABEL}: {len(df)} transactions for {address}.")
+    payloads = build_test_cache_payloads()
+    for address, df, meta in payloads:
+        cache_mod.write(address, df, meta, cache_root=cache_dir)
+    create_test_tax_file(cache_dir, primary_address=payloads[0][0], secondary_address=payloads[1][0])
+    print(f"Wrote {TEST_DATASET_LABEL}: {sum(len(df) for _, df, _ in payloads)} transactions across {len(payloads)} wallets.")
     return 0
 
 

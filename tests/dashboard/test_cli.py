@@ -115,11 +115,11 @@ class CliFetchProgrammaticTests(unittest.TestCase):
 
     def test_demo_writes_synthetic_cache_without_api_key(self) -> None:
         from ai_accountant.dashboard import cli
-        from ai_accountant.dashboard.demo import DEMO_WALLET_ADDRESS
+        from ai_accountant.dashboard.demo import TEST_WALLET_ADDRESS
 
         rc = cli.main(["demo", "--cache-dir", str(self.tmp)])
         self.assertEqual(rc, 0)
-        self.assertTrue((self.tmp / DEMO_WALLET_ADDRESS / "transactions.pkl").exists())
+        self.assertTrue((self.tmp / TEST_WALLET_ADDRESS / "transactions.pkl").exists())
 
 
 if __name__ == "__main__":

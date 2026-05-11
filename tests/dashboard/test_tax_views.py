@@ -59,7 +59,7 @@ class TaxPageContextTests(unittest.TestCase):
         df = _make_df({"tag_type": "Swap"})
         ctx = tax_page(df, address=WALLET, meta=None)
         for key in ("address", "address_short", "meta", "summary",
-                    "classification", "review_queue", "yearly", "no_data",
+                    "classification", "tax_advice", "review_queue", "yearly", "no_data",
                     "tax_country", "tax_country_profile", "tax_country_options",
                     "tax_deadlines"):
             self.assertIn(key, ctx)
@@ -95,6 +95,17 @@ class TaxPageContextTests(unittest.TestCase):
         ctx = tax_page(df, address=WALLET, meta=None)
         self.assertIsInstance(ctx["review_queue"], list)
 
+    def test_tax_advice_is_list(self):
+        df = _make_df({"tag_type": "Swap", "native_out_sol": Decimal("1.0")})
+        ctx = tax_page(df, address=WALLET, meta=None, tax_country="US")
+        self.assertIsInstance(ctx["tax_advice"], list)
+        self.assertTrue(ctx["tax_advice"])
+
+    def test_no_data_tax_advice_is_empty(self):
+        df = pd.DataFrame(columns=DATAFRAME_COLUMNS)
+        ctx = tax_page(df, address=WALLET, meta=None)
+        self.assertEqual(ctx["tax_advice"], [])
+
     def test_yearly_is_list(self):
         df = _make_df({"tag_type": "Swap"})
         ctx = tax_page(df, address=WALLET, meta=None)
@@ -125,9 +136,16 @@ class TaxPageContextTests(unittest.TestCase):
         self.assertIn("Form 8949", ctx["review_queue"][0]["tax_forms"])
         self.assertTrue(ctx["tax_deadlines"])
 
-    def test_unknown_tax_country_falls_back_to_us(self):
+    def test_poland_tax_country_uses_polish_profile(self):
         df = _make_df({"tag_type": "Swap"})
         ctx = tax_page(df, address=WALLET, meta=None, tax_country="PL")
+        self.assertEqual(ctx["tax_country"], "PL")
+        self.assertEqual(ctx["tax_country_profile"]["label"], "Poland")
+        self.assertIn("PIT-38", ctx["review_queue"][0]["tax_forms"])
+
+    def test_unknown_tax_country_falls_back_to_us(self):
+        df = _make_df({"tag_type": "Swap"})
+        ctx = tax_page(df, address=WALLET, meta=None, tax_country="ZZ")
         self.assertEqual(ctx["tax_country"], "US")
 
 

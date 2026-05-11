@@ -94,6 +94,42 @@ _TAX_COUNTRY_PROFILES: dict[str, dict[str, Any]] = {
             },
         ],
     },
+    "PL": {
+        "code": "PL",
+        "label": "Poland",
+        "summary": (
+            "Polish PIT guidance treats taxable crypto disposal separately from crypto-to-crypto swaps. "
+            "Use these notes as a Polish PIT-38 review checklist, not as a final legal opinion."
+        ),
+        "deadline_warning_days": 30,
+        "sources": [
+            {
+                "label": "podatki.gov.pl crypto disposal",
+                "url": (
+                    "https://www.podatki.gov.pl/podatki-osobiste/pit/informacje-podstawowe/"
+                    "co-jest-opodatkowane/zbycie-kryptowalut/"
+                ),
+            },
+            {
+                "label": "podatki.gov.pl PIT-38 2025",
+                "url": "https://www.podatki.gov.pl/twoj-e-pit/pit-38-za-2025-rok/",
+            },
+            {
+                "label": "Personal Income Tax Act",
+                "url": "https://isap.sejm.gov.pl/isap.nsf/DocDetails.xsp?id=WDU19910800350",
+            },
+        ],
+    },
+}
+
+_TAX_COUNTRY_ALIASES: dict[str, str] = {
+    "US": "US",
+    "USA": "US",
+    "UNITED STATES": "US",
+    "UNITED STATES OF AMERICA": "US",
+    "PL": "PL",
+    "POLAND": "PL",
+    "POLSKA": "PL",
 }
 
 _US_TAX_DEADLINES_BY_YEAR: dict[int, list[dict[str, str]]] = {
@@ -162,6 +198,34 @@ _US_TAX_DEADLINES_BY_YEAR: dict[int, list[dict[str, str]]] = {
             "note": "The January payment may not be needed if the return is filed and paid by Jan. 31.",
             "source_label": "IRS Publication 505",
             "source_url": "https://www.irs.gov/publications/p505",
+        },
+    ],
+}
+
+_PL_TAX_DEADLINES_BY_YEAR: dict[int, list[dict[str, str]]] = {
+    2025: [
+        {
+            "kind": "annual_pit38_return",
+            "label": "File PIT-38 for 2025 virtual currency disposal and acquisition costs",
+            "due_date": "2026-04-30",
+            "action": "File PIT-38 and pay any 2025 tax due by the statutory deadline.",
+            "note": "Report documented acquisition costs even if no taxable disposal occurred in the year.",
+            "source_label": "podatki.gov.pl PIT-38",
+            "source_url": "https://www.podatki.gov.pl/twoj-e-pit/pit-38-za-2025-rok/",
+        },
+    ],
+    2026: [
+        {
+            "kind": "annual_pit38_return",
+            "label": "File PIT-38 for 2026 virtual currency disposal and acquisition costs",
+            "due_date": "2027-04-30",
+            "action": "File PIT-38 and pay any 2026 tax due by the statutory deadline.",
+            "note": "For Polish crypto reporting, excess acquisition costs can carry forward instead of creating a deductible loss.",
+            "source_label": "podatki.gov.pl crypto disposal",
+            "source_url": (
+                "https://www.podatki.gov.pl/podatki-osobiste/pit/informacje-podstawowe/"
+                "co-jest-opodatkowane/zbycie-kryptowalut/"
+            ),
         },
     ],
 }
@@ -290,6 +354,79 @@ _US_TAX_GUIDANCE_BY_RULE: dict[str, dict[str, str]] = {
     },
 }
 
+_PL_TAX_GUIDANCE_BY_RULE: dict[str, dict[str, str]] = {
+    "swap_trade_cost_basis": {
+        "treatment": (
+            "For Polish PIT, exchange between virtual currencies is generally not a taxable disposal. "
+            "Taxable disposal usually means conversion to legal tender, goods, services, or a property right "
+            "other than virtual currency."
+        ),
+        "tax_due": (
+            "Potential tax is 19% of income from taxable crypto disposal. If documented costs exceed revenue, "
+            "income is zero and excess costs carry forward; Polish rules do not create a separate deductible "
+            "crypto loss."
+        ),
+        "calculation": "PIT-38 income = taxable disposal revenue in PLN - documented direct acquisition/disposal costs.",
+        "forms": "Usually PIT-38 for an individual Polish tax resident.",
+        "rate_note": "The Polish virtual currency PIT rate is 19%, subject to taxpayer-specific facts.",
+    },
+    "nft_cost_basis": {
+        "treatment": (
+            "NFT treatment can differ from virtual currency treatment. Review whether the NFT is a property right, "
+            "service-related asset, collectible-like asset, or business inventory before using crypto rules."
+        ),
+        "tax_due": "Potential tax depends on the legal classification of the NFT and the taxpayer status.",
+        "calculation": "Reconcile sale proceeds, acquisition cost, direct fees, and PLN conversion rate for the disposal date.",
+        "forms": "Discuss PIT-38 versus other PIT treatment with a Polish tax professional.",
+        "rate_note": "Do not infer the rate until NFT classification is confirmed.",
+    },
+    "airdrop_income_review": {
+        "treatment": (
+            "Airdrops and rewards need fact-specific Polish review. The dashboard should not assume the asset has "
+            "deductible acquisition cost unless the taxpayer paid a documented direct acquisition expense."
+        ),
+        "tax_due": "Potential tax depends on whether and when income arises and on later taxable disposal.",
+        "calculation": "Document receipt facts, control date, market value, later disposal revenue, and any direct costs.",
+        "forms": "Potentially PIT-38 or another PIT schedule depending on facts.",
+        "rate_note": "No reliable rate can be shown until the event is classified.",
+    },
+    "large_transfer_label": {
+        "treatment": "A self-transfer between the taxpayer's own wallets is generally not a taxable disposal.",
+        "tax_due": "Possible tax only after confirming whether this was a self-transfer, sale, payment, gift, or protocol action.",
+        "calculation": "Classify ownership and purpose first; calculate PIT only for taxable disposals or income events.",
+        "forms": "Usually support records for self-transfers; PIT reporting depends on the final classification.",
+        "rate_note": "No rate can be inferred until ownership and purpose are confirmed.",
+    },
+    "source_unknown": {
+        "treatment": "Unknown source. It may be a self-transfer, exchange withdrawal, reward, payment, gift, or sale proceeds.",
+        "tax_due": "Possible tax depends entirely on the source and later disposal.",
+        "calculation": "Label the source first, then apply Polish PIT treatment only if the event is taxable.",
+        "forms": "Usually PIT-38 for taxable crypto disposals, but facts can require different treatment.",
+        "rate_note": "No reliable rate can be shown until the source is identified.",
+    },
+    "failed_transaction_fee": {
+        "treatment": "A failed transaction usually is not a disposal of the intended asset.",
+        "tax_due": "Usually no taxable disposal from the failed action itself; keep network fee records.",
+        "calculation": "Record fee asset, fee amount, timestamp, and PLN value if needed for support records.",
+        "forms": "Usually support records rather than a standalone PIT-38 disposal entry.",
+        "rate_note": "No rate applies unless another taxable event occurred.",
+    },
+    "unknown_program": {
+        "treatment": "Unknown protocol interaction. Do not treat it as tax-ready until the economic purpose is known.",
+        "tax_due": "Could be no tax, taxable disposal, income, fee-only activity, or a protocol position change.",
+        "calculation": "Identify assets disposed, assets received, direct costs, timestamp, and PLN values.",
+        "forms": "Form depends on classification after review.",
+        "rate_note": "No reliable rate can be shown until the transaction is classified.",
+    },
+    "tax_review_needed": {
+        "treatment": "Needs manual classification before Polish tax treatment can be assigned.",
+        "tax_due": "Possible tax depends on whether this was a taxable disposal, income event, transfer, or fee.",
+        "calculation": "Classify the event, then calculate PLN revenue and documented direct costs if taxable.",
+        "forms": "Possible PIT-38 or other PIT treatment depending on facts.",
+        "rate_note": "No reliable rate can be shown until classified.",
+    },
+}
+
 TAXABLE_CATEGORIES: frozenset[str] = frozenset({"Income", "Swap", "Airdrop"})
 
 REVIEW_REQUIRED_CATEGORIES: frozenset[str] = frozenset({
@@ -305,6 +442,25 @@ TAX_DISCLAIMER = (
     "This is not financial or tax advice. "
     "Always consult a qualified tax professional."
 )
+
+_TAX_ADVICE_ASSUMPTIONS: dict[str, dict[str, Any]] = {
+    "US": {
+        "currency": "USD",
+        "sol_rate": Decimal("200"),
+        "tax_rate": Decimal("0.24"),
+        "rate_label": "demo 24% short-term/ordinary rate",
+        "money_prefix": "$",
+        "money_suffix": "",
+    },
+    "PL": {
+        "currency": "PLN",
+        "sol_rate": Decimal("560"),
+        "tax_rate": Decimal("0.19"),
+        "rate_label": "19% PIT virtual-currency rate",
+        "money_prefix": "",
+        "money_suffix": " PLN",
+    },
+}
 
 # Category → review queue tier (lower = higher priority)
 _CATEGORY_TIER: dict[str, int] = {
@@ -327,7 +483,8 @@ def tax_category(row: pd.Series) -> str:
 
 def normalize_tax_country(country: str | None) -> str:
     """Return a supported tax country code, defaulting to United States."""
-    code = _safe_str(country, DEFAULT_TAX_COUNTRY).strip().upper()
+    raw = _safe_str(country, DEFAULT_TAX_COUNTRY).strip().upper()
+    code = _TAX_COUNTRY_ALIASES.get(raw, raw)
     return code if code in _TAX_COUNTRY_PROFILES else DEFAULT_TAX_COUNTRY
 
 
@@ -357,17 +514,18 @@ def tax_deadline_rows(
 ) -> list[dict[str, Any]]:
     """Return sourced tax deadlines with dashboard warning status."""
     tax_country = normalize_tax_country(country)
-    if tax_country != "US":
+    if tax_country not in {"US", "PL"}:
         return []
     today = today or datetime.now(timezone.utc).date()
     warning_days = int(tax_country_profile(tax_country).get("deadline_warning_days", 30))
     target_years = sorted(set(years or []))
     if not target_years:
         target_years = [today.year - 1, today.year]
+    deadlines_by_year = _US_TAX_DEADLINES_BY_YEAR if tax_country == "US" else _PL_TAX_DEADLINES_BY_YEAR
 
     rows: list[dict[str, Any]] = []
     for year in target_years:
-        for raw in _US_TAX_DEADLINES_BY_YEAR.get(year, []):
+        for raw in deadlines_by_year.get(year, []):
             due = date.fromisoformat(raw["due_date"])
             days_until = (due - today).days
             if days_until < 0:
@@ -418,9 +576,333 @@ def tax_deadline_notice(
     return rows[-1]
 
 
+def tax_advice_cards(
+    df: pd.DataFrame,
+    *,
+    country: str | None = DEFAULT_TAX_COUNTRY,
+    limit: int = 4,
+) -> list[dict[str, Any]]:
+    """Return accountant-style action cards with conservative, sourced estimates."""
+    if df.empty:
+        return []
+
+    tax_country = normalize_tax_country(country)
+    cards = [
+        _self_transfer_advice_card(df, tax_country),
+        _cost_basis_advice_card(df, tax_country),
+        _polish_crypto_swap_advice_card(df, tax_country),
+        _us_specific_lot_advice_card(df, tax_country),
+    ]
+    result = [card for card in cards if card is not None]
+    result.sort(key=lambda card: (card["priority"], card["title"]))
+    return result[:limit]
+
+
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+
+def _base_advice_card(
+    *,
+    card_id: str,
+    priority: int,
+    title: str,
+    badge: str,
+    status_class: str,
+    impact_label: str,
+    estimated_tax_effect_display: str,
+    action: str,
+    why: str,
+    calculation: str,
+    evidence: list[str],
+    source_label: str,
+    source_url: str,
+) -> dict[str, Any]:
+    return {
+        "id": card_id,
+        "priority": priority,
+        "title": title,
+        "badge": badge,
+        "status_class": status_class,
+        "impact_label": impact_label,
+        "estimated_tax_effect_display": estimated_tax_effect_display,
+        "action": action,
+        "why": why,
+        "calculation": calculation,
+        "evidence": evidence,
+        "source_label": source_label,
+        "source_url": source_url,
+    }
+
+
+def _self_transfer_advice_card(df: pd.DataFrame, tax_country: str) -> dict[str, Any] | None:
+    amount = Decimal("0")
+    count = 0
+    for _, row in df.iterrows():
+        if not _row_is_advice_candidate(row):
+            continue
+        net = _safe_decimal(row.get("native_net_sol"))
+        if net <= 0:
+            continue
+        if not (_is_possible_internal_transfer(row) or _is_source_unknown(row)):
+            continue
+        amount += net
+        count += 1
+    if count == 0:
+        return None
+
+    effect_display, calculation = _advice_tax_effect(amount, tax_country)
+    if tax_country == "US":
+        return _base_advice_card(
+            card_id="confirm_self_transfers",
+            priority=10,
+            title="Confirm own-wallet transfers first",
+            badge="Avoid overstatement",
+            status_class="warning",
+            impact_label="Possible false-tax exposure",
+            estimated_tax_effect_display=effect_display,
+            action=(
+                f"Confirm or reject {count} incoming transfer{'s' if count != 1 else ''} before treating "
+                "the funds as income or sale proceeds."
+            ),
+            why=(
+                "IRS virtual-currency FAQs say transfers between wallets/accounts owned by the same taxpayer "
+                "are non-taxable. This is usually the fastest accountant win because it removes false income."
+            ),
+            calculation=calculation,
+            evidence=[f"{_fmt(amount)} SOL of incoming transfers still need ownership/source labels."],
+            source_label="IRS virtual currency FAQ Q38",
+            source_url=(
+                "https://www.irs.gov/individuals/international-taxpayers/"
+                "frequently-asked-questions-on-virtual-currency-transactions"
+            ),
+        )
+
+    return _base_advice_card(
+        card_id="confirm_self_transfers",
+        priority=10,
+        title="Najpierw potwierdz wlasne transfery",
+        badge="Ryzyko nadplaty",
+        status_class="warning",
+        impact_label="Szacowany efekt przed review",
+        estimated_tax_effect_display=effect_display,
+        action=(
+            f"Potwierdz lub odrzuc {count} przychodzacych transfer{'ow' if count != 1 else ''}, zanim "
+            "oznaczysz je jako przychod, sprzedaz albo koszt."
+        ),
+        why=(
+            "W polskim PIT-38 kluczowe jest ustalenie, czy doszlo do odplatnego zbycia. Wlasny transfer "
+            "portfel-portfel nie powinien sztucznie powiekszac przychodow ani kosztow."
+        ),
+        calculation=calculation,
+        evidence=[f"{_fmt(amount)} SOL przychodzacych transferow nadal wymaga etykiety zrodla/wlasnosci."],
+        source_label="podatki.gov.pl - zbycie kryptowalut",
+        source_url=(
+            "https://www.podatki.gov.pl/podatki-osobiste/pit/informacje-podstawowe/"
+            "co-jest-opodatkowane/zbycie-kryptowalut/"
+        ),
+    )
+
+
+def _cost_basis_advice_card(df: pd.DataFrame, tax_country: str) -> dict[str, Any] | None:
+    amount = Decimal("0")
+    fees = Decimal("0")
+    count = 0
+    for _, row in df.iterrows():
+        if not _row_is_advice_candidate(row):
+            continue
+        case = _classify(row)
+        if case not in {"swap", "nft_sold", "lp", "perp"}:
+            continue
+        amount += _advice_disposed_sol(row)
+        if bool(row.get("fee_paid_by_wallet")):
+            fees += _safe_decimal(row.get("fee_sol"))
+        count += 1
+    if count == 0 and fees == 0:
+        return None
+
+    basis_amount = amount + fees
+    effect_display, calculation = _advice_tax_effect(basis_amount, tax_country)
+    if tax_country == "PL":
+        return _base_advice_card(
+            card_id="document_pit38_costs",
+            priority=20,
+            title="Udokumentuj koszty do PIT-38",
+            badge="Mozliwa oszczednosc / carryforward",
+            status_class="warning",
+            impact_label="Szacowany efekt kosztow",
+            estimated_tax_effect_display=effect_display,
+            action=(
+                f"Zbierz faktury, historie gield, potwierdzenia zakupu i oplat dla "
+                f"{count} transakcji przed eksportem PIT-38."
+            ),
+            why=(
+                "Polskie przepisy pozwalaja wykazac udokumentowane koszty nabycia i zbycia walut wirtualnych. "
+                "Jezeli koszty przewyzszaja przychod, niewykorzystana czesc przechodzi na kolejne lata."
+            ),
+            calculation=calculation,
+            evidence=[
+                f"{_fmt(amount)} SOL potencjalnej bazy/kosztu z transakcji wymagajacych review.",
+                f"{_fmt(fees)} SOL oplat sieciowych do potwierdzenia przez ksiegowego.",
+            ],
+            source_label="podatki.gov.pl - koszty i stawka 19%",
+            source_url=(
+                "https://www.podatki.gov.pl/podatki-osobiste/pit/informacje-podstawowe/"
+                "co-jest-opodatkowane/zbycie-kryptowalut/"
+            ),
+        )
+
+    return _base_advice_card(
+        card_id="document_cost_basis",
+        priority=20,
+        title="Add cost basis before filing",
+        badge="Estimated tax reduction",
+        status_class="warning",
+        impact_label="Potential basis effect",
+        estimated_tax_effect_display=effect_display,
+        action=(
+            f"Attach acquisition lots, USD FMV, fees and timestamps for {count} disposal candidate"
+            f"{'s' if count != 1 else ''} before exporting Form 8949."
+        ),
+        why=(
+            "For US capital assets, confirmed basis and sale expenses reduce gain or increase a capital loss. "
+            "Without lot records, the result can default to FIFO-style assumptions and overstate tax."
+        ),
+        calculation=calculation,
+        evidence=[
+            f"{_fmt(amount)} SOL of detected disposal value needs basis support.",
+            f"{_fmt(fees)} SOL of fees should be tied to the relevant disposal or acquisition.",
+        ],
+        source_label="IRS Form 8949 instructions",
+        source_url="https://www.irs.gov/instructions/i8949",
+    )
+
+
+def _polish_crypto_swap_advice_card(df: pd.DataFrame, tax_country: str) -> dict[str, Any] | None:
+    if tax_country != "PL":
+        return None
+    amount = Decimal("0")
+    count = 0
+    for _, row in df.iterrows():
+        if not _row_is_advice_candidate(row):
+            continue
+        if _classify(row) != "swap":
+            continue
+        amount += _advice_disposed_sol(row)
+        count += 1
+    if count == 0:
+        return None
+
+    effect_display, calculation = _advice_tax_effect(amount, tax_country)
+    return _base_advice_card(
+        card_id="pl_crypto_to_crypto_not_taxable",
+        priority=30,
+        title="Nie opodatkuj swapow krypto-krypto w PL",
+        badge="Nadplata do unikniecia",
+        status_class="confirmed",
+        impact_label="Ryzyko blednego podatku",
+        estimated_tax_effect_display=effect_display,
+        action=(
+            f"Oznacz {count} swap{'ow' if count != 1 else ''} krypto-krypto jako review/non-taxable dla PIT-38, "
+            "a podatek licz dopiero przy wymianie na PLN/fiat, towar, usluge, prawo majatkowe albo przy zaplacie krypto."
+        ),
+        why=(
+            "podatki.gov.pl wskazuje, ze wymiana pomiedzy walutami wirtualnymi nie podlega opodatkowaniu. "
+            "To dobra rzecz do pokazania sedziom, bo app nie kopiuje slepo zasad z USA."
+        ),
+        calculation=calculation,
+        evidence=[f"{count} swap{'y' if count != 1 else ''} wykryte jako potencjalnie do reklasyfikacji w PL."],
+        source_label="podatki.gov.pl - wymiana krypto-krypto",
+        source_url=(
+            "https://www.podatki.gov.pl/podatki-osobiste/pit/informacje-podstawowe/"
+            "co-jest-opodatkowane/zbycie-kryptowalut/"
+        ),
+    )
+
+
+def _us_specific_lot_advice_card(df: pd.DataFrame, tax_country: str) -> dict[str, Any] | None:
+    if tax_country != "US":
+        return None
+    count = 0
+    amount = Decimal("0")
+    for _, row in df.iterrows():
+        if not _row_is_advice_candidate(row):
+            continue
+        if _classify(row) not in {"swap", "nft_sold", "lp", "perp"}:
+            continue
+        count += 1
+        amount += _advice_disposed_sol(row)
+    if count == 0:
+        return None
+
+    effect_display, calculation = _advice_tax_effect(amount, tax_country)
+    return _base_advice_card(
+        card_id="us_specific_identification",
+        priority=40,
+        title="Try specific-lot identification",
+        badge="Planning lever",
+        status_class="neutral",
+        impact_label="Maximum lot-selection exposure",
+        estimated_tax_effect_display=effect_display,
+        action=(
+            "Before finalizing FIFO, check whether the taxpayer can specifically identify higher-basis lots "
+            "for the detected disposals."
+        ),
+        why=(
+            "IRS FAQs allow specific identification when the taxpayer can substantiate the units, basis, FMV "
+            "and sale/disposition details. If not, FIFO applies."
+        ),
+        calculation=calculation,
+        evidence=[f"{count} disposal candidate{'s' if count != 1 else ''} may benefit from lot-level records."],
+        source_label="IRS virtual currency FAQ Q39-Q41",
+        source_url=(
+            "https://www.irs.gov/individuals/international-taxpayers/"
+            "frequently-asked-questions-on-virtual-currency-transactions"
+        ),
+    )
+
+
+def _row_is_advice_candidate(row: pd.Series) -> bool:
+    if _is_tax_excluded(row) or _is_confirmed_internal_transfer(row):
+        return False
+    return _safe_str(row.get("status"), "") == "succeeded"
+
+
+def _advice_disposed_sol(row: pd.Series) -> Decimal:
+    native_out = _safe_decimal(row.get("native_out_sol"))
+    if native_out > 0:
+        return native_out
+    net = _safe_decimal(row.get("native_net_sol"))
+    return net.copy_abs() if net < 0 else Decimal("0")
+
+
+def _advice_tax_effect(amount_sol: Decimal, tax_country: str) -> tuple[str, str]:
+    assumptions = _TAX_ADVICE_ASSUMPTIONS.get(tax_country, _TAX_ADVICE_ASSUMPTIONS["US"])
+    if amount_sol <= 0:
+        return (
+            "Needs FMV",
+            "No reliable amount yet: add fair market value, cost basis and fee data first.",
+        )
+    fiat_value = amount_sol * _safe_decimal(assumptions["sol_rate"])
+    effect = fiat_value * _safe_decimal(assumptions["tax_rate"])
+    currency = str(assumptions["currency"])
+    return (
+        _money(effect, currency),
+        (
+            f"Demo estimate: {_fmt(amount_sol)} SOL x {_money(_safe_decimal(assumptions['sol_rate']), currency)}/SOL "
+            f"x {assumptions['rate_label']} = {_money(effect, currency)}. "
+            "Replace demo rates with actual FMV before filing."
+        ),
+    )
+
+
+def _money(value: Decimal, currency: str) -> str:
+    rounded = value.quantize(Decimal("0.01"))
+    rendered = f"{rounded:f}"
+    if currency == "USD":
+        return f"${rendered}"
+    return f"{rendered} {currency}"
 
 
 def _review_tier(row: pd.Series, category: str) -> int | None:
@@ -702,7 +1184,7 @@ def _detail(
 
 
 def _localized_tax_note(rule_id: str, base_note: str, country: str) -> str:
-    if normalize_tax_country(country) != "US":
+    if normalize_tax_country(country) not in {"US", "PL"}:
         return base_note
     guidance = _country_tax_guidance(rule_id, country)
     return (
@@ -713,8 +1195,11 @@ def _localized_tax_note(rule_id: str, base_note: str, country: str) -> str:
 
 
 def _country_tax_guidance(rule_id: str, country: str) -> dict[str, str]:
-    if normalize_tax_country(country) == "US":
+    tax_country = normalize_tax_country(country)
+    if tax_country == "US":
         return _US_TAX_GUIDANCE_BY_RULE.get(rule_id, _US_TAX_GUIDANCE_BY_RULE["tax_review_needed"])
+    if tax_country == "PL":
+        return _PL_TAX_GUIDANCE_BY_RULE.get(rule_id, _PL_TAX_GUIDANCE_BY_RULE["tax_review_needed"])
     fallback = _US_TAX_GUIDANCE_BY_RULE["tax_review_needed"]
     return {
         "treatment": "No country-specific tax profile is available yet.",
@@ -748,7 +1233,9 @@ def _review_evidence(row: pd.Series, category: str) -> list[str]:
 
 def _transaction_warning(row: pd.Series, rule_id: str) -> dict[str, str] | None:
     fee = _safe_decimal(row.get("fee_sol"))
-    net = _safe_decimal(row.get("native_net_sol"))
+    net = _safe_decimal(row.get("native_transfer_net_sol"))
+    if net == 0 and row.get("native_transfer_net_sol") is None:
+        net = _safe_decimal(row.get("native_net_sol"))
     token_flows = row.get("token_flow_details")
     has_token_movement = False
     if isinstance(token_flows, list):
@@ -790,6 +1277,17 @@ def _review_count(df: pd.DataFrame) -> int:
     """Count review-queue candidates without building the full queue (no explain_row calls)."""
     count = 0
     for _, row in df.iterrows():
+        if _is_tax_excluded(row) or _is_confirmed_internal_transfer(row):
+            continue
+        custom_status = _safe_str(row.get("tax_review_status"), "")
+        if custom_status in {"needs_client_answer", "needs_accountant_review", "blocked_missing_data"}:
+            count += 1
+            continue
+        if custom_status in {"resolved", "informational", "excluded"}:
+            continue
+        if _is_possible_internal_transfer(row):
+            count += 1
+            continue
         cat = tax_category(row)
         if _review_tier(row, cat) is not None:
             count += 1
@@ -852,7 +1350,15 @@ def tax_summary(df: pd.DataFrame, address: str) -> dict[str, Any]:
     taxable_count = 0
 
     for _, row in df.iterrows():
+        if _is_tax_excluded(row):
+            continue
+        if bool(row.get("fee_paid_by_wallet")):
+            fees += _safe_decimal(row.get("fee_sol"))
+        if _skip_tax_amount_totals(row):
+            continue
         if _safe_str(row.get("status"), "") != "succeeded":
+            continue
+        if _is_confirmed_internal_transfer(row) or _is_possible_internal_transfer(row):
             continue
         cat = tax_category(row)
         net = _safe_decimal(row.get("native_net_sol"))
@@ -862,8 +1368,6 @@ def tax_summary(df: pd.DataFrame, address: str) -> dict[str, Any]:
             expense += net.copy_abs()
         if cat in TAXABLE_CATEGORIES:
             taxable_count += 1
-        if bool(row.get("fee_paid_by_wallet")):
-            fees += _safe_decimal(row.get("fee_sol"))
 
     return {
         "total_income_sol": income,
@@ -891,6 +1395,16 @@ def tax_review_queue(
     qualified: list[tuple[int, int, dict]] = []
 
     for _, row in df.iterrows():
+        if _is_tax_excluded(row) or _is_confirmed_internal_transfer(row):
+            continue
+        custom_status = _safe_str(row.get("tax_review_status"), "")
+        if custom_status in {"resolved", "informational", "excluded", "ready"}:
+            continue
+        if _is_possible_internal_transfer(row):
+            item = _possible_internal_review_item(row, tax_country)
+            ts = int(row.get("timestamp_unix") or 0)
+            qualified.append((1, -ts, item))
+            continue
         case = _classify(row)
         cat = _CASE_TO_CATEGORY.get(case, "Unknown / Needs review")
         tier = _review_tier(row, cat)
@@ -906,6 +1420,8 @@ def tax_review_queue(
             "date": _row_date(row),
             "signature": sig,
             "sig_short": (sig[:8] + "…") if len(sig) > 8 else sig,
+            "account_address": _safe_str(row.get("account_address"), ""),
+            "explorer_url": f"https://explorer.solana.com/tx/{sig}" if sig else "",
             "category": cat,
             "category_label": _category_label(cat),
             "case_key": case,
@@ -916,6 +1432,7 @@ def tax_review_queue(
             "unknown_facts": exp.unknown_facts,
             "suggested_actions": [review["suggested_tax_action"]],
             "expanded_explanation": exp.expanded_explanation,
+            "confidence_percent": exp.confidence_percent,
             "review_label": exp.review_label,
             "review_reason": review["review_reason"],
             "rule_id": review["rule_id"],
@@ -950,6 +1467,8 @@ def tax_classification_rows(df: pd.DataFrame) -> list[dict]:
 
     buckets: dict[str, dict] = {}
     for _, row in df.iterrows():
+        if _is_tax_excluded(row) or _is_confirmed_internal_transfer(row) or _is_possible_internal_transfer(row):
+            continue
         case = _classify(row)
         cat = _CASE_TO_CATEGORY.get(case, "Unknown / Needs review")
         if cat not in buckets:
@@ -995,6 +1514,8 @@ def yearly_summary(df: pd.DataFrame) -> list[dict]:
 
     years: dict[int, dict] = {}
     for _, row in df.iterrows():
+        if _is_tax_excluded(row):
+            continue
         ts = row.get("timestamp_unix")
         if ts is None:
             continue
@@ -1005,6 +1526,8 @@ def yearly_summary(df: pd.DataFrame) -> list[dict]:
         if _safe_str(row.get("status"), "") != "succeeded":
             continue
 
+        skip_amount_totals = _skip_tax_amount_totals(row)
+        is_internal_or_pending = _is_confirmed_internal_transfer(row) or _is_possible_internal_transfer(row)
         cat = tax_category(row)
         net = _safe_decimal(row.get("native_net_sol"))
 
@@ -1016,11 +1539,11 @@ def yearly_summary(df: pd.DataFrame) -> list[dict]:
                 "_fees": Decimal("0"),
                 "taxable_count": 0,
             }
-        if cat == "Income":
+        if cat == "Income" and not is_internal_or_pending and not skip_amount_totals:
             years[year]["_income"] += net
-        elif cat == "Expense":
+        elif cat == "Expense" and not is_internal_or_pending and not skip_amount_totals:
             years[year]["_expense"] += net.copy_abs()
-        if cat in TAXABLE_CATEGORIES:
+        if cat in TAXABLE_CATEGORIES and not is_internal_or_pending and not skip_amount_totals:
             years[year]["taxable_count"] += 1
         if bool(row.get("fee_paid_by_wallet")):
             years[year]["_fees"] += _safe_decimal(row.get("fee_sol"))
@@ -1054,8 +1577,26 @@ def tax_export_frame(df: pd.DataFrame) -> pd.DataFrame:
     sorted_df = df.sort_values("timestamp_unix", ascending=False, kind="stable").reset_index(drop=True)
     rows = []
     for _, row in sorted_df.iterrows():
-        case = _classify(row)
-        cat = _CASE_TO_CATEGORY.get(case, "Unknown / Needs review")
+        if _is_tax_excluded(row):
+            continue
+        custom_category = _safe_str(row.get("tax_category"), "")
+        custom_status = _safe_str(row.get("tax_review_status"), "")
+        if custom_category and custom_category not in {"unknown"}:
+            case = custom_category
+            cat = custom_category.replace("_", " ").title()
+            taxable_value = _custom_taxable_export_value(custom_category, custom_status)
+        elif _is_confirmed_internal_transfer(row):
+            case = "internal_transfer"
+            cat = "Internal transfer"
+            taxable_value = "no"
+        elif _is_possible_internal_transfer(row):
+            case = "possible_internal_transfer"
+            cat = "Possible internal transfer"
+            taxable_value = "review"
+        else:
+            case = _classify(row)
+            cat = _CASE_TO_CATEGORY.get(case, "Unknown / Needs review")
+            taxable_value = "yes" if cat in TAXABLE_CATEGORIES else "no"
         exp = explain_row(row)
         rows.append({
             "date": _row_date(row),
@@ -1067,11 +1608,129 @@ def tax_export_frame(df: pd.DataFrame) -> pd.DataFrame:
             "sol_net": _fmt(_safe_decimal(row.get("native_net_sol")), signed=True),
             "token_summary": _safe_str(row.get("net_flow_summary"), ""),
             "fee_sol": _fmt(_safe_decimal(row.get("fee_sol"))),
-            "is_potentially_taxable": "yes" if cat in TAXABLE_CATEGORIES else "no",
+            "is_potentially_taxable": taxable_value,
             "review_label": exp.review_label,
             "notes": exp.short_explanation[:200],
         })
     return pd.DataFrame(rows, columns=_TAX_EXPORT_COLUMNS)
+
+
+def _custom_taxable_export_value(category: str, status: str) -> str:
+    if status in {"needs_client_answer", "needs_accountant_review", "blocked_missing_data"}:
+        return "review"
+    if category in {
+        "internal_transfer",
+        "transfer_from_exchange",
+        "buy",
+        "staking_deposit",
+        "failed_fee_only",
+    }:
+        return "no"
+    if category in {
+        "sell",
+        "swap_trade",
+        "airdrop_reward",
+        "staking_reward",
+        "nft_sale",
+        "payment_for_services",
+    }:
+        return "yes"
+    return "review" if category in {"transfer_to_exchange", "defi_complex"} else "no"
+
+
+def _is_tax_excluded(row: pd.Series) -> bool:
+    return _safe_str(row.get("tax_scope"), "") in {"excluded", "watch_only"}
+
+
+def _is_confirmed_internal_transfer(row: pd.Series) -> bool:
+    return bool(row.get("is_internal_transfer"))
+
+
+def _is_possible_internal_transfer(row: pd.Series) -> bool:
+    return _safe_str(row.get("review_reason"), "") == "possible_internal_transfer"
+
+
+def _skip_tax_amount_totals(row: pd.Series) -> bool:
+    custom_category = _safe_str(row.get("tax_category"), "")
+    custom_status = _safe_str(row.get("tax_review_status"), "")
+    if custom_status in {
+        "needs_client_answer",
+        "needs_accountant_review",
+        "blocked_missing_data",
+        "informational",
+        "excluded",
+    }:
+        return True
+    return custom_category in {
+        "internal_transfer",
+        "transfer_from_exchange",
+        "transfer_to_exchange",
+        "staking_deposit",
+        "failed_fee_only",
+    }
+
+
+def _possible_internal_review_item(row: pd.Series, tax_country: str) -> dict[str, Any]:
+    from .explainer import explain_row
+
+    exp = explain_row(row)
+    sig = _safe_str(row.get("signature"), "")
+    direction = "incoming" if _safe_decimal(row.get("native_net_sol")) > 0 else "outgoing"
+    if direction == "incoming":
+        action = (
+            "Confirm whether this came from another wallet owned by the taxpayer before treating it as income."
+        )
+        note = (
+            "This incoming transfer may be from another wallet owned by the taxpayer. "
+            "Confirm ownership before treating as income."
+        )
+    else:
+        action = "Confirm whether this is an internal transfer before assigning a tax treatment."
+        note = (
+            "This outgoing transfer may be an internal transfer. "
+            "Do not classify as expense until confirmed."
+        )
+    return {
+        "date": _row_date(row),
+        "signature": sig,
+        "sig_short": (sig[:8] + "…") if len(sig) > 8 else sig,
+        "account_address": _safe_str(row.get("account_address"), ""),
+        "explorer_url": f"https://explorer.solana.com/tx/{sig}" if sig else "",
+        "category": "Transfer",
+        "category_label": "Possible internal transfer",
+        "case_key": "possible_internal_transfer",
+        "detected_pattern": "Possible internal transfer",
+        "sol_net": _fmt(_safe_decimal(row.get("native_net_sol")), signed=True),
+        "short_explanation": exp.short_explanation,
+        "known_facts": exp.known_facts,
+        "unknown_facts": exp.unknown_facts,
+        "suggested_actions": [action],
+        "expanded_explanation": exp.expanded_explanation,
+        "confidence_percent": exp.confidence_percent,
+        "review_label": "Possible internal transfer",
+        "review_reason": "possible_internal_transfer",
+        "rule_id": "possible_internal_transfer",
+        "suggested_tax_action": action,
+        "evidence": _review_evidence(row, "Transfer"),
+        "missing_information": [
+            "Whether the sending and receiving wallets are both owned by this taxpayer.",
+            "Whether the transfer match should be confirmed or rejected.",
+        ],
+        "tax_accounting_note": note,
+        "tax_treatment": "Likely not taxable if confirmed as a self-transfer; needs review before final use.",
+        "tax_due": "Do not calculate income, proceeds, or gain until ownership is confirmed.",
+        "tax_calculation": "Confirm/reject the internal transfer match, then keep only the network fee in records if confirmed.",
+        "tax_forms": "Usually no Form 8949 event for a confirmed self-transfer; keep support records.",
+        "tax_rate_note": "No rate can be inferred until ownership and purpose are confirmed.",
+        "tax_country": tax_country,
+        "tax_country_label": tax_country_profile(tax_country)["label"],
+        "tax_deadline_notice": tax_deadline_notice(tax_country, _row_year(row)),
+        "transaction_warning": None,
+        "status": _safe_str(row.get("status"), ""),
+        "source": _safe_str(row.get("source"), ""),
+        "tag_protocol": _safe_str(row.get("tag_protocol"), ""),
+        "tier": 1,
+    }
 
 
 _YEARLY_EXPORT_COLUMNS = [
@@ -1104,6 +1763,7 @@ __all__ = [
     "TAXABLE_CATEGORIES",
     "TAX_DISCLAIMER",
     "normalize_tax_country",
+    "tax_advice_cards",
     "tax_category",
     "tax_classification_rows",
     "tax_country_options",

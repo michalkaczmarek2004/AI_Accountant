@@ -14,6 +14,7 @@
     {% else %}
     <p class="meta-line">No data cached for this wallet yet.</p>
     {% endif %}
+    <p class="muted">Wallet Dashboard shows raw Solana wallet activity. It helps identify transfers, swaps, staking, NFT activity, fees, and failed transactions. This is not a final tax report until the wallet is connected to a Tax File and reviewed.</p>
   </div>
   <div class="header-actions">
     <form method="post" action="{{ url_for('refresh_route', address=address) }}">
@@ -217,7 +218,7 @@
   </div>
   <div class="export-secondary">
     <a href="{{ url_for('export_csv_route', address=address) }}{% if filter.to_querystring() %}?{{ filter.to_querystring() }}{% endif %}">Download CSV</a>
-    <a href="{{ url_for('export_json_route', address=address) }}{% if filter.to_querystring() %}?{{ filter.to_querystring() }}{% endif %}">Export developer JSON</a>
+    <a href="{{ url_for('export_json_route', address=address) }}{% if filter.to_querystring() %}?{{ filter.to_querystring() }}{% endif %}">Download advanced JSON</a>
   </div>
 </section>
 

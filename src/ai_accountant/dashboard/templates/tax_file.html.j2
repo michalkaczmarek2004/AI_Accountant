@@ -1,0 +1,797 @@
+{% extends "base.html.j2" %}
+{% block title %}{{ tax_file.name }} - AI Accountant{% endblock %}
+
+{% macro review_hidden(item) -%}
+  <input type="hidden" name="account_id" value="{{ item.account_id }}">
+  <input type="hidden" name="transaction_id" value="{{ item.signature }}">
+  <input type="hidden" name="review_reason" value="{{ item.review_reason }}">
+  <input type="hidden" name="original_tax_category" value="{{ item.detected_category_enum or item.tax_category }}">
+  <input type="hidden" name="tax_category" value="{{ item.tax_category }}">
+{%- endmacro %}
+
+{% macro client_answer_controls(item) -%}
+  {% if item.choices %}
+  <details class="action-details">
+    <summary class="link-button">{% if item.client_answer %}Edit client answer{% else %}Save client answer{% endif %}</summary>
+    <form method="post" action="{{ url_for('answer_review_item_route', tax_file_id=tax_file.id, review_item_id=item.id) }}" class="stacked-form">
+      <input type="hidden" name="account_id" value="{{ item.account_id }}">
+      <input type="hidden" name="transaction_id" value="{{ item.signature }}">
+      <input type="hidden" name="review_reason" value="{{ item.review_reason }}">
+      <input type="hidden" name="direction" value="{{ item.direction }}">
+      <input type="hidden" name="client_question" value="{{ item.client_question }}">
+      <label>Client answer
+        <select name="client_answer">
+          {% for choice in item.choices %}
+          <option value="{{ choice.value }}" {% if item.client_answer == choice.value %}selected{% endif %}>{{ choice.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="secondary">Save client answer</button>
+    </form>
+  </details>
+  {% endif %}
+  {% if item.client_answer %}
+  <form method="post" action="{{ url_for('clear_review_answer_route', tax_file_id=tax_file.id, review_item_id=item.id) }}" class="inline-form" onsubmit="return confirm('Clear this client answer and reopen the question?');">
+    <button type="submit" class="link-button">Clear client answer</button>
+  </form>
+  {% endif %}
+{%- endmacro %}
+
+{% macro override_panel(item, label='Resolve / Override') -%}
+  <details class="action-details">
+    <summary class="link-button">{{ label }}</summary>
+    <form method="post" action="{{ url_for('override_review_item_route', tax_file_id=tax_file.id, review_item_id=item.id) }}" class="stacked-form">
+      {{ review_hidden(item) }}
+      <label>Tax category
+        <select name="tax_category">
+          {% for category in tax_categories %}
+          <option value="{{ category.value }}" {% if item.tax_category == category.value %}selected{% endif %}>{{ category.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Review status
+        <select name="tax_review_status">
+          {% for status in tax_review_statuses %}
+          <option value="{{ status.value }}" {% if item.tax_review_status == status.value %}selected{% endif %}>{{ status.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Reason / note
+        <textarea name="accountant_note" required placeholder="Document the evidence or professional judgment behind this decision.">{{ item.accountant_note }}</textarea>
+      </label>
+      <button type="submit" class="primary">Save override</button>
+    </form>
+  </details>
+{%- endmacro %}
+
+{% macro exclusion_controls(item) -%}
+  {% if item.tax_scope == 'excluded' %}
+  <details class="action-details">
+    <summary class="link-button">Restore</summary>
+    <form method="post" action="{{ url_for('restore_review_item_route', tax_file_id=tax_file.id, review_item_id=item.id) }}" class="stacked-form" onsubmit="return confirm('Restore this transaction to the Tax File?');">
+      {{ review_hidden(item) }}
+      <label>Reason
+        <textarea name="accountant_note" required placeholder="Why should this transaction be restored?"></textarea>
+      </label>
+      <button type="submit" class="secondary">Restore excluded transaction</button>
+    </form>
+  </details>
+  {% else %}
+  <details class="action-details">
+    <summary class="link-button">Exclude</summary>
+    <form method="post" action="{{ url_for('exclude_review_item_route', tax_file_id=tax_file.id, review_item_id=item.id) }}" class="stacked-form" onsubmit="return confirm('Exclude this transaction from the Tax File? Raw transaction data will be kept.');">
+      {{ review_hidden(item) }}
+      <label>Reason
+        <textarea name="accountant_note" required placeholder="Why is this transaction excluded from filing totals?"></textarea>
+      </label>
+      <button type="submit" class="danger">Exclude from tax file</button>
+    </form>
+  </details>
+  {% endif %}
+{%- endmacro %}
+
+{% macro reopen_controls(item) -%}
+  <details class="action-details">
+    <summary class="link-button">Reopen item</summary>
+    <form method="post" action="{{ url_for('reopen_review_item_route', tax_file_id=tax_file.id, review_item_id=item.id) }}" class="stacked-form">
+      {{ review_hidden(item) }}
+      <label>New status
+        <select name="tax_review_status">
+          <option value="needs_accountant_review">Needs accountant review</option>
+          <option value="needs_client_answer">Needs client answer</option>
+        </select>
+      </label>
+      <label>Reason
+        <textarea name="accountant_note" required placeholder="Why is this item being reopened?"></textarea>
+      </label>
+      <button type="submit" class="secondary">Reopen item</button>
+    </form>
+  </details>
+{%- endmacro %}
+
+{% macro reset_controls(item) -%}
+  {% if item.override_applied %}
+  <details class="action-details">
+    <summary class="link-button">Reset classification</summary>
+    <form method="post" action="{{ url_for('reset_review_item_route', tax_file_id=tax_file.id, review_item_id=item.id) }}" class="stacked-form" onsubmit="return confirm('Reset the accountant override for this item?');">
+      <label>Reason
+        <textarea name="accountant_note" required placeholder="Why is the override being reset?"></textarea>
+      </label>
+      <button type="submit" class="secondary">Reset classification</button>
+    </form>
+  </details>
+  {% endif %}
+{%- endmacro %}
+
+{% block body %}
+<section class="wallet-header">
+  <div>
+    <p class="eyebrow">Tax File Dashboard</p>
+    <h1>{{ tax_file.name }}</h1>
+    <p class="meta-line">
+      {{ tax_file.tax_year }} • {{ tax_file.tax_country }} • {{ tax_file.entity_type }} •
+      {{ accounts|length }} accounts • {{ summary.transactions_total }} owned-account transactions
+    </p>
+    {% if ai_accountant_findings %}
+    <p><mark class="confirmed">{{ ai_accountant_findings.badge }}</mark></p>
+    {% endif %}
+    <p class="muted">A Tax File is a year-specific accounting workspace. It combines selected owned wallets, excludes watch-only and external accounts from tax totals, resolves internal transfers, tracks missing data, and prepares exportable draft tax reports.</p>
+  </div>
+  <div class="header-actions">
+    <a href="{{ url_for('tax_file_tax_route', tax_file_id=tax_file.id) }}" class="button primary">Open Unified Tax Assistant</a>
+    <a href="{{ url_for('tax_files_route') }}" class="button secondary">Back to Tax Files</a>
+  </div>
+</section>
+
+{% if notice %}
+<section class="notice-panel"><p>{{ notice }}</p></section>
+{% endif %}
+
+{% if tax_payment_plan.available %}
+<section class="report-section demo-confirmation-panel">
+  <div class="section-heading">
+    <div>
+      <h2>{% if tax_payment_plan.confirmation_pending %}1 User Confirmation Needed{% else %}Self-Transfer Confirmed{% endif %}</h2>
+      <p class="muted">{{ tax_payment_plan.summary }}</p>
+    </div>
+    <mark class="{{ tax_payment_plan.confirmation_status_class }}">{{ tax_payment_plan.confirmation_status_label }}</mark>
+  </div>
+  {% if tax_payment_plan.confirmation_pending and tax_payment_plan.confirmation_item %}
+  {% set demo_question = tax_payment_plan.confirmation_item %}
+  <p><strong>{{ tax_payment_plan.confirmation_question }}</strong></p>
+  <form method="post" action="{{ url_for('answer_review_item_route', tax_file_id=tax_file.id, review_item_id=demo_question.id) }}" class="demo-confirmation-form">
+    <input type="hidden" name="account_id" value="{{ demo_question.account_id }}">
+    <input type="hidden" name="transaction_id" value="{{ demo_question.signature }}">
+    <input type="hidden" name="review_reason" value="{{ demo_question.review_reason }}">
+    <input type="hidden" name="direction" value="{{ demo_question.direction }}">
+    <input type="hidden" name="client_question" value="{{ demo_question.client_question }}">
+    <input type="hidden" name="client_answer" value="own_wallet">
+    <button type="submit" class="primary">Confirm: {{ tax_payment_plan.confirmation_answer_label }}</button>
+  </form>
+  {% else %}
+  <p><strong>0 blockers.</strong> The 14 SOL transfer is classified as an internal transfer and excluded from taxable income.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if ai_accountant_findings %}
+<section class="report-section ai-findings-panel">
+  <div class="section-heading">
+    <div>
+      <h2>AI Accountant Findings</h2>
+      <p class="muted">{{ ai_accountant_findings.defensive_copy }}</p>
+    </div>
+    <mark class="confirmed">Audit-ready draft</mark>
+  </div>
+  <div class="ai-findings-grid">
+    {% for item in ai_accountant_findings['items'] %}
+    <a class="ai-finding-card" href="{{ item.href }}">
+      <span>{{ item.label }}</span>
+      <strong>{{ item.value }}</strong>
+      <span>{{ item.note }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="report-section">
+  <div class="section-heading">
+    <div>
+      <h2>Action Summary</h2>
+      <p class="muted">Highest-priority accounting signals for this Tax File.</p>
+    </div>
+  </div>
+  <div class="kpi-grid tax-file-kpis">
+    {% for metric in action_summary.metrics %}
+    <article class="kpi"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong></article>
+    {% endfor %}
+  </div>
+  <p><strong>Primary next action:</strong> {{ action_summary.primary_next_action }}</p>
+</section>
+
+{% if tax_payment_plan.available %}
+<section class="report-section">
+  <div class="section-heading">
+    <div>
+      <h2>Presentation Readiness</h2>
+      <p class="muted">US/USD demo status with only the intended client confirmation left open.</p>
+    </div>
+    <mark class="{{ tax_payment_plan.confirmation_status_class }}">{{ 'Action needed' if tax_payment_plan.confirmation_pending else 'Clean' }}</mark>
+  </div>
+  <table>
+    <thead><tr><th>Check</th><th>Status</th><th>Note</th></tr></thead>
+    <tbody>
+      {% for row in tax_payment_plan.readiness_rows %}
+      <tr>
+        <td>{{ row.item }}</td>
+        <td><mark class="{{ row.status_class }}">{{ row.status }}</mark></td>
+        <td>{{ row.note }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<section class="report-section">
+  <div class="section-heading">
+    <div>
+      <h2>Tax Readiness</h2>
+      <p class="muted">{{ tax_readiness.explanation }}</p>
+    </div>
+    <mark class="{{ tax_readiness.status_class }}">{{ tax_readiness.status_label }}</mark>
+  </div>
+  <p><strong>{{ tax_readiness.score_display }}</strong> readiness score</p>
+  <table>
+    <thead><tr><th>Blocker type</th><th>Count</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for blocker in tax_readiness.blockers %}
+      <tr>
+        <td>{{ blocker.type }}</td>
+        <td>{{ blocker.count }}</td>
+        <td><mark class="{{ blocker.status_class }}">{{ 'Open' if blocker.count else 'Clear' }}</mark></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+<section class="report-section">
+  <div class="section-heading">
+    <div>
+      <h2>{% if tax_payment_plan.available and tax_payment_plan.confirmation_pending %}Pending User Confirmation{% else %}Filing Blockers{% endif %}</h2>
+      <p class="muted">{% if tax_payment_plan.available %}Only the self-transfer confirmation should appear here before it is saved.{% else %}{{ summary.review_needed }} active review items • {{ summary.unmatched_inflows }} unmatched inflows • {{ summary.unmatched_outflows }} unmatched outflows{% endif %}</p>
+    </div>
+  </div>
+  {% if filing_blockers %}
+  <table>
+    <thead><tr><th>Blocker</th><th>Account</th><th>Reason</th><th>Status</th><th>Action needed</th></tr></thead>
+    <tbody>
+      {% for item in filing_blockers %}
+      <tr>
+        <td><strong>{{ item.title }}</strong><span class="muted">{{ item.date }}</span></td>
+        <td>{{ item.account_label }}{% if item.address_short %}<span class="muted">{{ item.address_short }}</span>{% endif %}</td>
+        <td>{{ item.review_reason_label }}<span class="enum-badge">{{ item.review_reason }}</span></td>
+        <td><mark class="warning">{{ item.tax_review_status_label }}</mark></td>
+        <td>{{ item.message }}{% if item.detail %}<span class="muted">{{ item.detail }}</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No filing blockers are active for this Tax File.</p>
+  {% endif %}
+</section>
+
+<section class="report-section" id="review-queue">
+  <h2>Review Queue</h2>
+  {% set group_titles = {
+    'needs_client_answer': 'Needs Client Answer',
+    'needs_accountant_review': 'Needs Accountant Review',
+    'resolved': 'Resolved',
+    'informational': 'Informational',
+    'excluded': 'Excluded'
+  } %}
+  {% if main_review_groups %}
+  {% for group_key, group_items in main_review_groups.items() %}
+  <h3>{{ group_titles[group_key] }}</h3>
+  <table>
+    <thead><tr><th>Item</th><th>Account</th><th>Category</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for item in group_items %}
+      <tr>
+        <td><strong>{{ item.title }}</strong><span class="muted">{{ item.date }}{% if item.signature_short %} • {{ item.signature_short }}{% endif %}</span></td>
+        <td>{{ item.account_label }}{% if item.address_short %}<span class="muted">{{ item.address_short }}</span>{% endif %}</td>
+        <td>{{ item.tax_category_label }}<span class="enum-badge">{{ item.tax_category }}</span></td>
+        <td><mark class="{{ 'confirmed' if item.tax_review_status == 'resolved' else ('neutral' if item.tax_review_status in ['informational', 'excluded'] else 'warning') }}">{{ item.tax_review_status_label }}</mark></td>
+        <td>
+          {{ item.message }}
+          {% if item.confidence_percent %}<span class="muted">AI confidence: {{ item.confidence_percent }}%</span>{% endif %}
+          {% if item.ai_reason %}<span class="muted">Why this was categorized this way: {{ item.ai_reason }}</span>{% endif %}
+          {% if item.tax_impact %}<span class="muted">Tax impact: {{ item.tax_impact }}</span>{% endif %}
+          {% if item.client_answer_label %}<span class="muted">Client answered: {{ item.client_answer_label }}</span>{% endif %}
+          {% if item.override_applied %}<span class="muted">Accountant override applied{% if item.override_at %} at {{ item.override_at[:16] | replace('T', ' ') }} UTC{% endif %}</span>{% endif %}
+          {% if item.accountant_note %}<span class="muted">Note: {{ item.accountant_note }}</span>{% endif %}
+          {% if item.excluded_reason %}<span class="muted">Excluded reason: {{ item.excluded_reason }}</span>{% endif %}
+        </td>
+        <td class="row-actions">
+          {{ client_answer_controls(item) }}
+          {{ override_panel(item) }}
+          {{ exclusion_controls(item) }}
+          {% if item.tax_review_status in ['resolved', 'informational', 'excluded'] %}{{ reopen_controls(item) }}{% endif %}
+          {{ reset_controls(item) }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endfor %}
+  {% else %}
+  <p class="empty">No review items are active in the main demo view.</p>
+  {% endif %}
+  {% if advanced_review_groups %}
+  <details class="action-details advanced-review-groups">
+    <summary class="link-button">Advanced / CPA workspace: resolved and support items</summary>
+    <table>
+      <thead><tr><th>Item</th><th>Account</th><th>Category</th><th>Status</th><th>Audit-ready explanation</th></tr></thead>
+      <tbody>
+        {% for group_key, group_items in advanced_review_groups.items() %}
+        {% for item in group_items %}
+        <tr>
+          <td><strong>{{ item.title }}</strong><span class="muted">{{ item.date }}{% if item.signature_short %} • {{ item.signature_short }}{% endif %}</span></td>
+          <td>{{ item.account_label }}{% if item.address_short %}<span class="muted">{{ item.address_short }}</span>{% endif %}</td>
+          <td>{{ item.tax_category_label }}</td>
+          <td><mark class="{{ 'confirmed' if item.tax_review_status == 'resolved' else 'neutral' }}">{{ item.tax_review_status_label }}</mark></td>
+          <td>
+            {% if item.ai_reason %}<span class="muted">Why: {{ item.ai_reason }}</span>{% endif %}
+            {% if item.tax_impact %}<span class="muted">Tax impact: {{ item.tax_impact }}</span>{% endif %}
+            {% if item.accountant_note %}<span class="muted">Audit note: {{ item.accountant_note }}</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
+</section>
+
+<section class="report-section" id="cost-basis">
+  <div class="section-heading">
+    <div>
+      <h2>Cost Basis</h2>
+      <p class="muted">Preliminary FIFO lot matching for disposals, missing acquisition history, fees, and fair market values.</p>
+    </div>
+  </div>
+  {% if cost_basis %}
+  <table>
+    <thead>
+      <tr>
+        <th>Asset</th>
+        <th>Lot acquired</th>
+        <th>Amount acquired</th>
+        <th>Cost basis</th>
+        <th>Fees</th>
+        <th>Disposed</th>
+        <th>Holding period</th>
+        <th>Remaining</th>
+        <th>Method</th>
+        <th>Status</th>
+        <th>Missing data</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in cost_basis %}
+      <tr>
+        <td><strong>{{ row.asset }}</strong>{% if row.source %}<span class="muted">{{ row.source }}</span>{% endif %}</td>
+        <td>{{ row.lot_acquired }}{% if row.signature_short %}<span class="muted">{{ row.signature_short }}</span>{% endif %}</td>
+        <td>{{ row.amount_acquired }}</td>
+        <td>{{ row.cost_basis }}</td>
+        <td>{{ row.fees }}</td>
+        <td>{{ row.disposed }}{% if row.disposal_date %}<span class="muted">Disposed {{ row.disposal_date }}</span>{% endif %}</td>
+        <td>{% if row.holding_period %}<mark class="{{ 'confirmed' if row.holding_period == 'Long-term' else 'warning' }}">{{ row.holding_period }}</mark><span class="muted">{{ row.holding_period_days }} days</span>{% else %}<span class="muted">Not disposed</span>{% endif %}</td>
+        <td>{{ row.remaining }}</td>
+        <td>{{ row.method }}</td>
+        <td><mark class="{{ row.status_class }}">{{ row.status }}</mark></td>
+        <td>{{ row.missing_data }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No acquisition lots or taxable disposal candidates were found for this Tax File yet.</p>
+  {% endif %}
+  <p class="muted">{{ cost_basis_note }}</p>
+</section>
+
+<details class="report-section collapsible-section">
+  <summary>
+    <div class="section-heading">
+      <div>
+        <h2>Potential Loss Harvesting Review</h2>
+        <p class="muted">{{ section_summaries.loss_review }}</p>
+      </div>
+      <mark class="{{ 'warning' if tax_loss_harvesting.available else 'neutral' }}">{{ tax_loss_harvesting.status_label }}</mark>
+    </div>
+  </summary>
+  <div class="tax-warning"><p>{{ loss_review_disclaimer }}</p></div>
+  <p class="muted">{{ tax_loss_harvesting.message }}</p>
+  <p>
+    Potential unrealized loss: <strong>{{ tax_loss_harvesting.total_unrealized_loss_display }}</strong> •
+    Potential tax impact before professional review: <strong>{{ tax_loss_harvesting.total_estimated_tax_effect_display }}</strong> •
+    Demo rate used before review: {{ tax_loss_harvesting.tax_rate }}
+  </p>
+  {% if tax_loss_harvesting.candidates %}
+  <table>
+    <thead>
+      <tr><th>Asset</th><th>Acquired</th><th>Cost basis</th><th>Current value</th><th>Potential impact before review</th><th>Review note</th></tr>
+    </thead>
+    <tbody>
+      {% for candidate in tax_loss_harvesting.candidates %}
+      <tr>
+        <td><strong>{{ candidate.amount }} {{ candidate.asset }}</strong><span class="muted">{{ candidate.market_source }}</span></td>
+        <td>{{ candidate.acquired_on }}{% if candidate.signature_short %}<span class="muted">{{ candidate.signature_short }}</span>{% endif %}</td>
+        <td>{{ candidate.cost_basis_display }}<span class="muted">Demo assumption before review</span></td>
+        <td>{{ candidate.current_value_display }}<span class="muted">Price {{ candidate.market_price_display }} on {{ candidate.market_date }}</span></td>
+        <td><strong>{{ candidate.estimated_tax_effect_display }}</strong><span class="muted">From {{ candidate.unrealized_loss_display }} estimated loss, not final</span></td>
+        <td>{{ candidate.action }}<span class="muted">{{ candidate.warning }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No candidate token lots matched the demo loss model.</p>
+  {% endif %}
+  <h3>Review Guardrails</h3>
+  <table>
+    <thead><tr><th>Guardrail</th><th>Status</th><th>Note</th></tr></thead>
+    <tbody>
+      {% for guardrail in tax_loss_harvesting.review_guardrails %}
+      <tr>
+        <td>{{ guardrail.guardrail }}</td>
+        <td><mark class="{{ guardrail.status_class }}">{{ guardrail.status }}</mark></td>
+        <td>{{ guardrail.note }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <h3>Assumptions &amp; Limitations</h3>
+  <p class="muted">{{ loss_review_assumptions_limitations }}</p>
+  <h3>Professional Review Notes</h3>
+  <ul>
+    {% for guardrail in tax_loss_harvesting.guardrails %}
+    <li>{{ guardrail }}</li>
+    {% endfor %}
+  </ul>
+  <p class="muted">
+    Sources:
+    {% for source in tax_loss_harvesting.sources %}
+    <a href="{{ source.url }}" target="_blank" rel="noreferrer">{{ source.label }}</a>{% if not loop.last %}, {% endif %}
+    {% endfor %}
+  </p>
+</details>
+
+<details class="report-section collapsible-section">
+  <summary>
+    <div class="section-heading">
+      <div>
+        <h2>Accountant Checklist</h2>
+        <p class="muted">{{ section_summaries.accountant_checklist }}</p>
+      </div>
+    </div>
+  </summary>
+  <p class="muted">Operational checklist for source data, classifications, review notes, and draft export readiness.</p>
+  <table>
+    <thead><tr><th>Task</th><th>Status</th><th>Note</th></tr></thead>
+    <tbody>
+      {% for row in accountant_checklist %}
+      <tr>
+        <td><strong>{{ row.task }}</strong></td>
+        <td><mark class="{{ row.status_class }}">{{ row.status }}</mark></td>
+        <td>{{ row.note }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">{{ accountant_checklist_note }}</p>
+</details>
+
+<details class="report-section collapsible-section">
+  <summary>
+    <div class="section-heading">
+      <div>
+        <h2>Connected Accounts</h2>
+        <p class="muted">{{ section_summaries.connected_accounts }}</p>
+      </div>
+    </div>
+  </summary>
+  <p class="muted">Owned accounts are included in unified totals. Watch-only and external accounts stay visible but excluded.</p>
+
+  {% if has_unlinked_cached_wallets %}
+  <form method="post" action="{{ url_for('add_account_route', tax_file_id=tax_file.id) }}" class="tax-file-inline-form">
+    <label>Cached wallet
+      <select name="address">
+        {% for wallet in cached_wallets %}
+        {% if not wallet.linked %}
+        <option value="{{ wallet.address }}" {% if wallet.linked %}disabled{% endif %}>
+          {{ wallet.address_short }}{% if wallet.dataset_label %} - {{ wallet.dataset_label }}{% endif %}{% if wallet.linked %} (linked){% endif %}
+        </option>
+        {% endif %}
+        {% endfor %}
+      </select>
+    </label>
+    <label>Label
+      <input type="text" name="label" placeholder="Phantom main">
+    </label>
+    <label>Ownership
+      <select name="ownership_status">
+        {% for status in ownership_statuses %}
+        <option value="{{ status }}" {% if status == 'owned' %}selected{% endif %}>{{ status }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="primary">Add Wallet</button>
+  </form>
+  {% elif cached_wallets %}
+  <p class="empty">All cached wallets are already connected to this Tax File.</p>
+  {% else %}
+  <p class="empty">No cached wallets yet. Open a wallet from the Wallets screen first, then add it here.</p>
+  {% endif %}
+
+  {% if accounts %}
+  <table>
+    <thead>
+      <tr><th>Label</th><th>Address</th><th>Ownership</th><th>Transactions</th><th>Included/excluded</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      {% for account in accounts %}
+      <tr>
+        <td><strong>{{ account.label }}</strong>{% if account.dataset_label %}<span class="muted">{{ account.dataset_label }}</span>{% endif %}</td>
+        <td><a href="{{ url_for('wallet_page_route', address=account.address) }}"><code>{{ account.address_short }}</code></a></td>
+        <td><mark class="{{ 'confirmed' if account.ownership_status == 'owned' else ('warning' if account.ownership_status == 'unknown' else 'neutral') }}">{{ account.ownership_status }}</mark></td>
+        <td>{{ account.transactions_count }}</td>
+        <td>{{ account.tax_scope }}{% if account.last_fetched_display %}<span class="muted">Fetched {{ account.last_fetched_display }} UTC</span>{% endif %}</td>
+        <td class="row-actions">
+          <a class="button secondary" href="{{ url_for('wallet_page_route', address=account.address) }}">Open Dashboard</a>
+          <form method="post" action="{{ url_for('update_account_route', tax_file_id=tax_file.id, account_id=account.id) }}" class="mini-link-form">
+            <label>Edit label
+              <input type="text" name="label" value="{{ account.label }}">
+            </label>
+            <label>Ownership
+              <select name="ownership_status">
+                {% for status in ownership_statuses %}
+                <option value="{{ status }}" {% if account.ownership_status == status %}selected{% endif %}>{{ status }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <button type="submit" class="secondary">Update</button>
+          </form>
+          <details class="action-details">
+            <summary class="link-button">Remove</summary>
+            <form method="post" action="{{ url_for('remove_account_route', tax_file_id=tax_file.id, account_id=account.id) }}" class="stacked-form" onsubmit="return confirm('Remove this account from the Tax File? The cached wallet will stay available.');">
+              <label>Reason
+                <textarea name="note" required placeholder="Why is this account being removed from the Tax File?"></textarea>
+              </label>
+              <button type="submit" class="danger">Remove from tax file</button>
+            </form>
+          </details>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</details>
+
+<details class="report-section collapsible-section" {% if section_state.client_questions_open %}open{% endif %}>
+  <summary>
+    <div class="section-heading">
+      <div>
+        <h2>Client Questions</h2>
+        <p class="muted">{{ section_summaries.client_questions }}</p>
+      </div>
+    </div>
+  </summary>
+  {% if client_questions %}
+  <table>
+    <thead><tr><th>Question</th><th>Transaction</th><th>Client answer</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for item in client_questions %}
+      <tr>
+        <td>
+          <strong>{{ item.title }}</strong>
+          {% if item.client_question %}<span class="muted">{{ item.client_question }}</span>{% endif %}
+          <span class="muted">{{ item.message }}</span>
+        </td>
+        <td>{{ item.account_label }}<span class="muted">{{ item.date }} • {{ item.signature_short }}</span></td>
+        <td>
+          {% if item.client_answer %}
+          <strong>{{ item.client_answer_label }}</strong>
+          <span class="muted">Saved by client</span>
+          {% else %}
+          <span class="muted">No answer yet</span>
+          {% endif %}
+        </td>
+        <td class="row-actions">
+          {{ client_answer_controls(item) }}
+          {{ override_panel(item) }}
+          {{ exclusion_controls(item) }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No client questions are active.</p>
+  {% endif %}
+</details>
+
+<details class="report-section collapsible-section" {% if section_state.internal_transfers_open %}open{% endif %}>
+  <summary>
+    <div class="section-heading">
+      <div>
+        <h2>Internal Transfers</h2>
+        <p class="muted">{{ section_summaries.internal_transfers }}</p>
+      </div>
+    </div>
+  </summary>
+  {% if transfer_matches %}
+  <table>
+    <thead>
+      <tr><th>From account</th><th>To account</th><th>Asset</th><th>Amount sent</th><th>Amount received</th><th>Fee</th><th>Time diff</th><th>Confidence</th><th>Status</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+      {% for match in transfer_matches %}
+      <tr>
+        <td>{{ match.from_account }}<span class="muted">{{ match.from_signature_short }}</span></td>
+        <td>{{ match.to_account }}<span class="muted">{{ match.to_signature_short }}</span></td>
+        <td>{{ match.asset }}</td>
+        <td>{{ match.amount_sent_display }}</td>
+        <td>{{ match.amount_received_display }}</td>
+        <td>{{ match.fee_display }}</td>
+        <td>{{ match.timestamp_diff_seconds }}s</td>
+        <td><mark class="{{ 'confirmed' if match.confidence == 'high' else ('warning' if match.confidence == 'medium' else 'neutral') }}">{{ match.confidence }}</mark></td>
+        <td><mark class="{{ 'confirmed' if match.status == 'confirmed' else ('failed' if match.status == 'rejected' else 'warning') }}">{{ match.status }}</mark></td>
+        <td class="row-actions">
+          {% if match.status != 'confirmed' %}
+          <details class="action-details">
+            <summary class="link-button">Confirm</summary>
+            <form method="post" action="{{ url_for('confirm_transfer_match_route', tax_file_id=tax_file.id, match_id=match.id) }}" class="stacked-form">
+              <label>Reason
+                <textarea name="note" required placeholder="Why is this confirmed as an internal transfer?"></textarea>
+              </label>
+              <button type="submit" class="secondary">Confirm internal transfer</button>
+            </form>
+          </details>
+          {% endif %}
+          {% if match.status != 'rejected' %}
+          <details class="action-details">
+            <summary class="link-button">Reject</summary>
+            <form method="post" action="{{ url_for('reject_transfer_match_route', tax_file_id=tax_file.id, match_id=match.id) }}" class="stacked-form">
+              <label>Reason
+                <textarea name="note" required placeholder="Why is this not an internal transfer?"></textarea>
+              </label>
+              <button type="submit" class="secondary">Reject match</button>
+            </form>
+          </details>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No possible internal transfers found yet.</p>
+  {% endif %}
+</details>
+
+<details class="report-section collapsible-section" id="tax-classification">
+  <summary>
+    <div class="section-heading">
+      <div>
+        <h2>Operations</h2>
+        <p class="muted">{{ section_summaries.operations }}</p>
+      </div>
+    </div>
+  </summary>
+  <p class="muted">All transactions currently connected to this Tax File. Raw wallet data is kept even when an item is overridden or excluded.</p>
+  {% if operations %}
+  <table class="operations-table">
+    <thead>
+      <tr><th>Date</th><th>Account</th><th>Transaction</th><th>Detected</th><th>Current</th><th>Status</th><th>Answer / note</th><th>Included</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      {% for item in operations %}
+      <tr>
+        <td>{{ item.date }}</td>
+        <td>{{ item.account_label }}<span class="muted">{{ item.account_address[:8] }}...{{ item.account_address[-4:] }}</span></td>
+        <td>
+          {% if item.signature %}
+          <a href="{{ url_for('tx_detail_route', address=item.account_address, sig=item.signature) }}"><code>{{ item.signature_short }}</code></a>
+          {% else %}
+          <span class="muted">No signature</span>
+          {% endif %}
+          {% if item.description %}<span class="muted">{{ item.description }}</span>{% endif %}
+        </td>
+        <td>{{ item.detected_category }}<span class="enum-badge">{{ item.detected_category_enum }}</span></td>
+        <td>{{ item.tax_category_label }}<span class="enum-badge">{{ item.tax_category }}</span></td>
+        <td><mark class="{{ 'confirmed' if item.tax_review_status == 'resolved' else ('neutral' if item.tax_review_status in ['ready', 'informational', 'excluded'] else 'warning') }}">{{ item.tax_review_status_label }}</mark></td>
+        <td>
+          {% if item.client_answer_label %}<span class="muted">Client: {{ item.client_answer_label }}</span>{% endif %}
+          {% if item.accountant_note %}<span class="muted">Accountant: {{ item.accountant_note }}</span>{% endif %}
+          {% if item.confidence_percent %}<span class="muted">AI confidence: {{ item.confidence_percent }}%</span>{% endif %}
+          {% if item.tax_impact %}<span class="muted">Tax impact: {{ item.tax_impact }}</span>{% endif %}
+          {% if not item.client_answer_label and not item.accountant_note %}<span class="muted">No manual note</span>{% endif %}
+        </td>
+        <td>{{ item.tax_scope }}{% if item.excluded_reason %}<span class="muted">{{ item.excluded_reason }}</span>{% endif %}</td>
+        <td class="row-actions">
+          {{ override_panel(item) }}
+          {{ exclusion_controls(item) }}
+          {% if item.tax_review_status in ['resolved', 'informational', 'excluded'] %}{{ reopen_controls(item) }}{% endif %}
+          {{ reset_controls(item) }}
+          {% if item.signature %}<a class="button secondary" href="{{ url_for('tx_detail_route', address=item.account_address, sig=item.signature) }}">Open raw transaction</a>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No operations are connected to this Tax File yet.</p>
+  {% endif %}
+</details>
+
+<details class="report-section collapsible-section">
+  <summary>
+    <div class="section-heading">
+      <div>
+        <h2>Audit Log</h2>
+        <p class="muted">{{ section_summaries.audit_log }}</p>
+      </div>
+    </div>
+  </summary>
+  <p class="muted">History of system detections, client answers, accountant decisions, account changes, and exclusions.</p>
+  {% if audit_log %}
+  <table>
+    <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Change</th><th>Note</th></tr></thead>
+    <tbody>
+      {% for entry in audit_log %}
+      <tr>
+        <td>{{ entry.created_display }} UTC</td>
+        <td><mark class="{{ 'confirmed' if entry.actor == 'accountant' else ('neutral' if entry.actor == 'system' else 'warning') }}">{{ entry.actor_label }}</mark></td>
+        <td>{{ entry.action_label }}</td>
+        <td>{{ entry.target_type.replace('_', ' ').title() }}<span class="muted">{{ entry.target_label }}</span></td>
+        <td>
+          {% if entry.old_value_display %}<span class="muted">Old: {{ entry.old_value_display }}</span>{% endif %}
+          {% if entry.new_value_display %}<span class="muted">New: {{ entry.new_value_display }}</span>{% endif %}
+        </td>
+        <td>{{ entry.note }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No audit events yet.</p>
+  {% endif %}
+</details>
+
+<details class="export-panel collapsible-section" id="cpa-export">
+  <summary>
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">CPA-ready package</p>
+        <h2>Draft Tax Review Export</h2>
+        <p class="muted">{{ section_summaries.export }}</p>
+      </div>
+    </div>
+  </summary>
+  <p class="muted">Owned accounts are combined. Confirmed internal transfers are excluded from income/outflow totals while fees, Form 8949 draft fields, Schedule D summary inputs, review items, missing data, and audit context remain visible.</p>
+  <div class="export-actions">
+    <a class="button primary export-primary" href="{{ url_for('tax_file_tax_route', tax_file_id=tax_file.id) }}">Open Unified Tax Assistant</a>
+  </div>
+  <div class="export-secondary">
+    <a href="{{ url_for('tax_file_export_csv_route', tax_file_id=tax_file.id) }}">Download CPA-ready CSV</a>
+    <a href="{{ url_for('tax_file_export_json_route', tax_file_id=tax_file.id) }}">Download CPA JSON package</a>
+  </div>
+</details>
+{% endblock %}

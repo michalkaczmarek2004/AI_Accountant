@@ -11,8 +11,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from ai_accountant import DATAFRAME_COLUMNS
-from ai_accountant.dashboard.filters import FilterSpec
 from ai_accountant.dashboard.demo import DEMO_WALLET_ADDRESS, build_demo_dataframe, build_demo_meta
+from ai_accountant.dashboard.filters import FilterSpec
 from ai_accountant.dashboard.views import tax_page, transaction_detail, wallet_page
 
 WALLET = "86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY"

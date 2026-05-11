@@ -287,6 +287,7 @@ def tax_page(
     """Build template context for the Tax Assistant page."""
     from ..tax_assistant import (
         normalize_tax_country,
+        tax_advice_cards,
         tax_classification_rows,
         tax_country_options,
         tax_country_profile,
@@ -312,6 +313,7 @@ def tax_page(
             "tax_deadlines": tax_deadline_rows(selected_country, tax_years),
             "summary": None,
             "classification": [],
+            "tax_advice": [],
             "review_queue": [],
             "yearly": [],
             "no_data": True,
@@ -338,6 +340,7 @@ def tax_page(
         "tax_country_options": tax_country_options(),
         "tax_deadlines": tax_deadline_rows(selected_country, tax_years),
         "summary": summary,
+        "tax_advice": tax_advice_cards(df, country=selected_country),
         "classification": tax_classification_rows(df),
         "review_queue": tax_review_queue(df, country=selected_country),
         "yearly": yearly_summary(df),

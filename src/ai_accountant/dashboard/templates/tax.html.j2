@@ -1,17 +1,26 @@
 {% extends "base.html.j2" %}
-{% block title %}Tax Assistant — {{ address_short }} — AI Accountant{% endblock %}
+{% block title %}{% if unified_tax_assistant %}Unified Tax Assistant — {{ tax_file.name }}{% else %}Tax Assistant — {{ address_short }}{% endif %} — AI Accountant{% endblock %}
 {% block body %}
 
 <section class="wallet-header">
   <div>
-    <p class="eyebrow">Tax Assistant</p>
+    <p class="eyebrow">{% if unified_tax_assistant %}Unified Tax Assistant{% else %}Tax Assistant{% endif %}</p>
+    {% if unified_tax_assistant %}
+    <h1>{{ tax_file.name }}</h1>
+    <p class="meta-line">{{ tax_file.tax_year }} • {{ tax_file.tax_country }} • {{ tax_file.entity_type }}</p>
+    {% else %}
     <h1><code title="{{ address }}">{{ address_short }}</code></h1>
+    {% endif %}
     {% if meta %}
-    <p class="meta-line">Last updated: {{ meta.fetched_at[:16] | replace('T', ' ') }} UTC</p>
+    <p class="meta-line">{{ meta.row_count }} transactions • Last updated: {{ meta.fetched_at[:16] | replace('T', ' ') }} UTC</p>
     {% endif %}
   </div>
   <div class="header-actions">
+    {% if unified_tax_assistant %}
+    <a href="{{ url_for('tax_file_detail_route', tax_file_id=tax_file.id) }}" class="button secondary">Back to tax file</a>
+    {% else %}
     <a href="{{ url_for('wallet_page_route', address=address) }}" class="button secondary">Back to wallet</a>
+    {% endif %}
   </div>
 </section>
 
@@ -19,8 +28,20 @@
   This is not financial or tax advice. Always consult a qualified tax professional.
 </div>
 
+{% set has_tax_payment_plan = tax_payment_plan is defined and tax_payment_plan.available %}
+
 <section class="tax-settings">
+  {% if demo_us_only|default(false) or has_tax_payment_plan %}
+  <div class="tax-country-lock">
+    <span class="muted">Tax country</span>
+    <strong>United States</strong>
+  </div>
+  {% else %}
+  {% if unified_tax_assistant %}
+  <form method="get" action="{{ url_for('tax_file_tax_route', tax_file_id=tax_file.id) }}">
+  {% else %}
   <form method="get" action="{{ url_for('tax_country_page_route', address=address) }}">
+  {% endif %}
     <label>Tax country
       <select name="tax_country">
         {% for country in tax_country_options %}
@@ -30,6 +51,7 @@
     </label>
     <button type="submit">Apply</button>
   </form>
+  {% endif %}
   <div>
     <strong>{{ tax_country_profile.label }} notes</strong>
     <p class="muted">{{ tax_country_profile.summary }}</p>
@@ -44,19 +66,38 @@
 
 {% if no_data %}
 <section class="empty-cache">
+  {% if unified_tax_assistant %}
+  <p>No tax-relevant owned-account events found for this tax file yet. Link owned accounts with cached transactions first.</p>
+  {% else %}
   <p>No tax-relevant events found for this wallet. Fetch transactions first, or this wallet has no parsed activity yet.</p>
+  {% endif %}
 </section>
 
 {% else %}
 
+{% if unified_tax_assistant and has_tax_payment_plan %}
+<section class="kpi-grid tax-kpi-grid">
+  {% for metric in tax_payment_plan.kpis %}
+  <article class="kpi {{ metric.class }}">
+    <span>{{ metric.label }}</span><strong>{{ metric.value }}</strong>
+    <small>{{ metric.note }}</small>
+  </article>
+  {% endfor %}
+</section>
+{% else %}
 <section class="kpi-grid tax-kpi-grid">
   <article class="kpi kpi-income">
     <span>Income</span><strong class="positive">{{ summary.total_income_sol }}</strong>
     <small>Incoming values that may require classification.</small>
   </article>
   <article class="kpi kpi-expense">
+    {% if unified_tax_assistant %}
+    <span>Outflows needing classification</span><strong>{{ summary.total_expense_sol }}</strong>
+    <small>Outgoing values that still need transfer, disposal, or payment context.</small>
+    {% else %}
     <span>Expense</span><strong>{{ summary.total_expense_sol }}</strong>
     <small>Outgoing SOL/assets treated as expense or outflow.</small>
+    {% endif %}
   </article>
   <article class="kpi kpi-fee">
     <span>Fees paid</span><strong>{{ summary.total_fees_sol }}</strong>
@@ -75,13 +116,148 @@
     <small>Transactions that need manual review or classification.</small>
   </article>
 </section>
+{% endif %}
 
+{% set has_loss_playbook = unified_tax_assistant and tax_loss_harvesting %}
+{% if has_tax_payment_plan %}
+<section class="report-section tax-playbook">
+  <div class="section-heading">
+    <div>
+      <h2>US Tax Estimate &amp; Optimization Plan</h2>
+      <p class="muted">{{ tax_payment_plan.summary }}</p>
+    </div>
+    <mark class="{{ 'warning' if tax_payment_plan.confirmation_pending else 'confirmed' }}">3 actions</mark>
+  </div>
+  <div class="kpi-grid tax-file-kpis">
+    <article class="kpi"><span>Estimated federal tax</span><strong>{{ tax_payment_plan.estimated_tax_before_display }}</strong><small>Draft estimate, not final tax due.</small></article>
+    <article class="kpi"><span>Potential federal tax reduction</span><strong>{{ tax_payment_plan.samo_tax_savings_display }}</strong><small>State tax not included.</small></article>
+    <article class="kpi"><span>After planning review</span><strong>{{ tax_payment_plan.optimized_tax_due_display }}</strong><small>Requires sale before year-end and CPA review.</small></article>
+  </div>
+  <div class="tax-split-grid">
+    <article class="tax-split-card">
+      <strong>Tax Reporting</strong>
+      <span>Tax reporting explains what happened.</span>
+      <table>
+        <tbody>
+          {% for row in tax_payment_plan.reporting_rows %}
+          <tr><td>{{ row.label }}</td><td><strong>{{ row.value }}</strong><span class="muted">{{ row.note }}</span></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </article>
+    <article class="tax-split-card">
+      <strong>Tax Planning</strong>
+      <span>Tax planning identifies actions to review before year-end.</span>
+      <table>
+        <tbody>
+          {% for row in tax_payment_plan.planning_rows %}
+          <tr><td>{{ row.label }}</td><td><strong>{{ row.value }}</strong><span class="muted">{{ row.note }}</span></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </article>
+  </div>
+  <div class="assumption-grid">
+    {% for assumption in tax_payment_plan.assumptions %}
+    <article class="assumption-card"><strong>Estimate assumptions</strong><span>{{ assumption }}</span></article>
+    {% endfor %}
+  </div>
+  <div class="tax-advice-grid">
+    {% for card in tax_payment_plan.cards %}
+    <article class="tax-advice-card {% if loop.index == 1 %}tax-advice-card-primary{% endif %}">
+      <div class="tax-advice-topline">
+        <span>{{ card.badge }}</span>
+        <mark class="{{ card.status_class }}">{{ card.status_label }}</mark>
+      </div>
+      <h3>{{ card.title }}</h3>
+      <p class="tax-impact">
+        <span>{{ card.impact_label }}</span>
+        <strong>{{ card.impact_display }}</strong>
+      </p>
+      <p><strong>Do this:</strong> {{ card.action }}</p>
+      <p>{{ card.why }}</p>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% elif tax_advice or has_loss_playbook %}
+<section class="report-section tax-playbook">
+  <div class="section-heading">
+    <div>
+      <h2>Accountant Action Plan</h2>
+      <p class="muted">Concrete review steps with an estimated tax effect before professional sign-off.</p>
+    </div>
+    <mark class="warning">{{ (tax_advice|length) + (1 if has_loss_playbook else 0) }} actions</mark>
+  </div>
+  <div class="tax-advice-grid">
+    {% if has_loss_playbook %}
+    <article class="tax-advice-card tax-advice-card-primary">
+      <div class="tax-advice-topline">
+        <span>Year-end planning</span>
+        <mark class="{{ 'warning' if tax_loss_harvesting.available else 'neutral' }}">{{ tax_loss_harvesting.status_label }}</mark>
+      </div>
+      <h3>{{ tax_loss_harvesting.title }}</h3>
+      <p class="tax-impact">
+        <span>Potential tax impact</span>
+        <strong>{{ tax_loss_harvesting.total_estimated_tax_effect_display }}</strong>
+      </p>
+      {% if tax_loss_harvesting.candidates %}
+      <p><strong>Do this:</strong> Ask the accountant to review whether the listed lots should be sold, held, or documented for carryforward before year-end.</p>
+      <ul>
+        {% for candidate in tax_loss_harvesting.candidates %}
+        {% if loop.index <= 3 %}
+        <li>{{ candidate.amount }} {{ candidate.asset }}: {{ candidate.estimated_tax_effect_display }} from {{ candidate.unrealized_loss_display }} estimated loss.</li>
+        {% endif %}
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p><strong>Do this:</strong> Add verified current prices and acquisition lots so the app can detect year-end planning candidates.</p>
+      {% endif %}
+      <p class="muted">{{ tax_loss_harvesting.message }}</p>
+      <p class="muted">
+        Sources:
+        {% for source in tax_loss_harvesting.sources %}
+        <a href="{{ source.url }}" target="_blank" rel="noreferrer">{{ source.label }}</a>{% if not loop.last %}, {% endif %}
+        {% endfor %}
+      </p>
+    </article>
+    {% endif %}
+    {% for advice in tax_advice %}
+    <article class="tax-advice-card">
+      <div class="tax-advice-topline">
+        <span>{{ advice.badge }}</span>
+        <mark class="{{ advice.status_class }}">{{ advice.impact_label }}</mark>
+      </div>
+      <h3>{{ advice.title }}</h3>
+      <p class="tax-impact">
+        <span>{{ advice.impact_label }}</span>
+        <strong>{{ advice.estimated_tax_effect_display }}</strong>
+      </p>
+      <p><strong>Do this:</strong> {{ advice.action }}</p>
+      <p>{{ advice.why }}</p>
+      {% if advice.evidence %}
+      <ul>
+        {% for item in advice.evidence %}
+        <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      <p class="muted">{{ advice.calculation }}</p>
+      <p class="muted">Source: <a href="{{ advice.source_url }}" target="_blank" rel="noreferrer">{{ advice.source_label }}</a></p>
+    </article>
+    {% endfor %}
+  </div>
+  <p class="muted">Estimates use demo SOL/fiat rates where exact FMV is missing. Replace with transaction-time fair market values before filing.</p>
+</section>
+{% endif %}
+
+{% if not unified_tax_assistant %}
 <section class="report-section tax-ack-scope" data-ack-scope="tax-deadlines">
   <details class="tax-deadlines-panel">
     <summary>
       <div>
         <h2>Tax Deadlines</h2>
-        <p class="muted">Federal IRS deadlines for {{ tax_country_profile.label }}. Completed items move to the end of the list and stay confirmed on this device.</p>
+        <p class="muted">Key filing and payment deadlines for {{ tax_country_profile.label }}. Completed items move to the end of the list and stay confirmed on this device.</p>
       </div>
       <mark class="medium"><span data-ack-count>{{ tax_deadlines|length }}</span> active</mark>
     </summary>
@@ -110,6 +286,39 @@
   {% endif %}
   </details>
 </section>
+{% endif %}
+
+{% if unified_tax_assistant and tax_loss_harvesting and not has_tax_payment_plan %}
+<section class="report-section">
+  <div class="section-heading">
+    <div>
+      <h2>Potential Loss Harvesting Review</h2>
+      <p class="muted">{{ tax_loss_harvesting.message }}</p>
+    </div>
+    <mark class="{{ 'warning' if tax_loss_harvesting.available else 'neutral' }}">{{ tax_loss_harvesting.status_label }}</mark>
+  </div>
+  <p>
+    Potential unrealized loss: <strong>{{ tax_loss_harvesting.total_unrealized_loss_display }}</strong> •
+    Potential tax impact before professional review: <strong>{{ tax_loss_harvesting.total_estimated_tax_effect_display }}</strong>
+  </p>
+  {% if tax_loss_harvesting.candidates %}
+  <table>
+    <thead><tr><th>Asset</th><th>Cost basis</th><th>Current value</th><th>Potential impact before review</th><th>Review note</th></tr></thead>
+    <tbody>
+      {% for candidate in tax_loss_harvesting.candidates %}
+      <tr>
+        <td><strong>{{ candidate.amount }} {{ candidate.asset }}</strong><span class="muted">{{ candidate.acquired_on }}</span></td>
+        <td>{{ candidate.cost_basis_display }}</td>
+        <td>{{ candidate.current_value_display }}<span class="muted">{{ candidate.market_price_display }} on {{ candidate.market_date }}</span></td>
+        <td><strong>{{ candidate.estimated_tax_effect_display }}</strong></td>
+        <td>{{ candidate.action }}<span class="muted">{{ candidate.warning }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endif %}
 
 <section class="report-section">
   <h2>Tax Classification</h2>
@@ -167,6 +376,9 @@
         <h4>Why this needs review</h4>
         <p>{{ item.review_reason }}</p>
         <p class="muted">{{ item.short_explanation }}</p>
+        {% if item.confidence_percent is not none and item.confidence_percent != '' %}
+        <p><strong>AI confidence:</strong> {{ item.confidence_percent }}%</p>
+        {% endif %}
         {% if item.evidence %}
         <h4>What we know</h4>
         <ul>{% for f in item.evidence %}<li>{{ f }}</li>{% endfor %}</ul>
@@ -202,7 +414,14 @@
         <h4>Tax/accounting note</h4>
         <p>{{ item.tax_accounting_note }}</p>
         <div class="tx-technical"><code>Tier {{ item.tier }} · Rule {{ item.rule_id }} · Detected pattern: {{ item.detected_pattern }}</code></div>
-        <p><a href="{{ url_for('tx_detail_route', address=address, sig=item.signature) }}">View raw transaction</a></p>
+        {% set raw_address = item.account_address if item.account_address else (address if not unified_tax_assistant else '') %}
+        {% if raw_address and item.signature %}
+        <p><a href="{{ url_for('tx_detail_route', address=raw_address, sig=item.signature) }}">View raw transaction</a></p>
+        {% elif item.explorer_url %}
+        <p><a href="{{ item.explorer_url }}" target="_blank" rel="noreferrer">View on Solana explorer</a></p>
+        {% else %}
+        <p class="muted">Raw transaction unavailable — missing wallet address or transaction hash</p>
+        {% endif %}
       </div>
     </details>
     {% endfor %}
@@ -220,7 +439,7 @@
       <tr>
         <th>Year</th>
         <th>Income</th>
-        <th>Expense</th>
+        <th>{% if unified_tax_assistant %}Outflows{% else %}Expense{% endif %}</th>
         <th>Fees</th>
         <th>Potentially taxable</th>
       </tr>
@@ -245,16 +464,30 @@
 <section class="export-panel">
   <div>
     <p class="eyebrow">Export</p>
-    <h2>Tax-ready report</h2>
+    {% if unified_tax_assistant %}
+    <h2>CPA-ready package</h2>
+    <p class="muted">CSV and JSON combine owned accounts. Confirmed internal transfers are not treated as income or outgoing taxable events. Draft Form 8949 fields, Schedule D summary inputs, review items, missing data, audit trail, and confidence scores stay traceable.</p>
+    {% else %}
+    <h2>Draft tax report</h2>
     <p class="muted">PDF is the primary handoff format. CSV and JSON remain available for accountants, reconciliation and developer workflows.</p>
+    {% endif %}
   </div>
   <div class="export-actions">
+    {% if unified_tax_assistant %}
+    <a class="button primary export-primary" href="{{ url_for('tax_file_export_csv_route', tax_file_id=tax_file.id) }}">Download CPA-ready CSV</a>
+    {% else %}
     <a class="button primary export-primary" href="{{ url_for('export_pdf_route', address=address) }}?tax_country={{ tax_country }}">Download PDF Report</a>
+    {% endif %}
   </div>
   <div class="export-secondary">
+    {% if unified_tax_assistant %}
+    <a href="{{ url_for('tax_file_export_json_route', tax_file_id=tax_file.id) }}">Download CPA JSON package</a>
+    <a href="{{ url_for('tax_file_detail_route', tax_file_id=tax_file.id) }}">Back to Tax File Dashboard</a>
+    {% else %}
     <a href="{{ url_for('tax_export_csv_route', address=address) }}">Download Tax CSV</a>
     <a href="{{ url_for('tax_summary_csv_route', address=address) }}">Download Yearly Summary CSV</a>
-    <a href="{{ url_for('tax_export_json_route', address=address) }}">Export developer JSON</a>
+    <a href="{{ url_for('tax_export_json_route', address=address) }}">Download accountant JSON</a>
+    {% endif %}
   </div>
 </section>
 

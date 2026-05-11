@@ -20,6 +20,7 @@ from ai_accountant.tax_assistant import (
     _review_tier,
     _row_date,
     normalize_tax_country,
+    tax_advice_cards,
     tax_category,
     tax_classification_rows,
     tax_country_options,
@@ -121,9 +122,14 @@ class TaxCountryProfileTests(unittest.TestCase):
         self.assertEqual(options[0]["label"], "United States")
         self.assertTrue(options[0]["sources"])
 
+    def test_poland_country_profile_is_supported(self):
+        self.assertEqual(normalize_tax_country("PL"), "PL")
+        self.assertEqual(normalize_tax_country("Polska"), "PL")
+        self.assertEqual(tax_country_profile("PL")["label"], "Poland")
+
     def test_unknown_country_falls_back_to_us(self):
-        self.assertEqual(normalize_tax_country("PL"), "US")
-        self.assertEqual(tax_country_profile("PL")["label"], "United States")
+        self.assertEqual(normalize_tax_country("ZZ"), "US")
+        self.assertEqual(tax_country_profile("ZZ")["label"], "United States")
 
     def test_us_deadline_rows_mark_due_soon_one_month_before(self):
         rows = tax_deadline_rows("US", [2026], today=date(2026, 5, 20))
@@ -139,6 +145,52 @@ class TaxCountryProfileTests(unittest.TestCase):
         self.assertIsNotNone(notice)
         self.assertEqual(notice["status"], "overdue")
         self.assertIn("2025 Form 1040", notice["label"])
+
+    def test_poland_deadline_rows_use_pit38(self):
+        rows = tax_deadline_rows("PL", [2025], today=date(2026, 4, 10))
+        self.assertEqual(rows[0]["status"], "due-soon")
+        self.assertIn("PIT-38", rows[0]["label"])
+        self.assertEqual(rows[0]["ack_id"], "PL:deadline:2025:annual_pit38_return:2026-04-30")
+
+
+class TaxAdviceCardsTests(unittest.TestCase):
+    def test_us_self_transfer_card_estimates_false_tax_exposure(self):
+        rows = [
+            _row(
+                tag_type="Transfer",
+                native_net_sol=Decimal("1.0"),
+                source="UNKNOWN",
+                tag_protocol="Unknown",
+            )
+        ]
+        cards = tax_advice_cards(pd.DataFrame(rows), country="US")
+        card = next(card for card in cards if card["id"] == "confirm_self_transfers")
+
+        self.assertEqual(card["estimated_tax_effect_display"], "$48.00")
+        self.assertIn("Confirm or reject 1 incoming transfer", card["action"])
+        self.assertIn("IRS virtual-currency FAQs", card["why"])
+
+    def test_pl_crypto_to_crypto_swap_card_uses_polish_rule(self):
+        rows = [_row(tag_type="Swap", native_out_sol=Decimal("1.0"))]
+        cards = tax_advice_cards(pd.DataFrame(rows), country="PL")
+        card = next(card for card in cards if card["id"] == "pl_crypto_to_crypto_not_taxable")
+
+        self.assertEqual(card["estimated_tax_effect_display"], "106.40 PLN")
+        self.assertIn("Nie opodatkuj", card["title"])
+        self.assertIn("wymiana pomiedzy walutami wirtualnymi", card["why"])
+
+    def test_pl_cost_basis_card_estimates_carryforward_value(self):
+        rows = [_row(tag_type="Swap", native_out_sol=Decimal("2.0"), fee_sol=Decimal("0.01"))]
+        cards = tax_advice_cards(pd.DataFrame(rows), country="PL")
+        card = next(card for card in cards if card["id"] == "document_pit38_costs")
+
+        self.assertEqual(card["estimated_tax_effect_display"], "213.86 PLN")
+        self.assertIn("PIT-38", card["title"])
+        self.assertIn("carryforward", card["badge"])
+
+    def test_empty_df_returns_no_tax_advice_cards(self):
+        df = pd.DataFrame(columns=DATAFRAME_COLUMNS)
+        self.assertEqual(tax_advice_cards(df, country="US"), [])
 
 
 class ReviewTierTests(unittest.TestCase):

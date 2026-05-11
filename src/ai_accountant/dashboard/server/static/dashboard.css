@@ -273,6 +273,93 @@ h3 {
   padding: var(--space-7) 0 var(--space-5);
 }
 
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.hero-actions form {
+  margin: 0;
+}
+
+.proof-grid,
+.faq-grid,
+.ai-findings-grid,
+.tax-split-grid,
+.assumption-grid {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.proof-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: var(--space-5) 0;
+}
+
+.faq-grid,
+.tax-split-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ai-findings-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.assumption-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.proof-grid article,
+.faq-grid article,
+.ai-finding-card,
+.tax-split-card,
+.assumption-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.ai-finding-card {
+  text-decoration: none;
+}
+
+.ai-finding-card:hover {
+  border-color: rgba(34, 197, 94, 0.32);
+  background: rgba(6, 78, 59, 0.18);
+}
+
+.proof-grid strong,
+.faq-grid strong,
+.ai-finding-card strong,
+.tax-split-card strong,
+.assumption-card strong {
+  color: var(--color-text);
+}
+
+.proof-grid span,
+.faq-grid span,
+.ai-finding-card span,
+.tax-split-card span,
+.assumption-card span {
+  color: var(--color-text-subtle);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.tax-split-card table {
+  min-width: 0;
+  margin-top: var(--space-2);
+}
+
+.tax-split-card td {
+  padding: 8px 0;
+}
+
 .wallet-header,
 .report-section,
 .paste-form,
@@ -371,7 +458,8 @@ button:focus-visible,
 .link-button:focus-visible,
 .clear:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
   outline: none;
   box-shadow: var(--shadow-focus);
 }
@@ -427,6 +515,192 @@ button.danger,
   white-space: nowrap;
 }
 
+.section-heading {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.section-heading h2 {
+  margin-bottom: var(--space-1);
+}
+
+.collapsible-section > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.collapsible-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-section > summary .section-heading {
+  margin-bottom: 0;
+}
+
+.collapsible-section[open] > summary {
+  margin-bottom: var(--space-4);
+}
+
+.collapsible-section[open] > summary .section-heading {
+  margin-bottom: 0;
+}
+
+.notice-panel,
+.tax-warning {
+  margin: var(--space-4) 0;
+  padding: var(--space-4);
+  border: 1px solid var(--status-warning-border);
+  border-radius: var(--radius-card);
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+}
+
+.notice-panel p,
+.tax-warning p {
+  margin: 0;
+}
+
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: flex-start;
+  min-width: 260px;
+}
+
+.tax-file-inline-form,
+.tax-file-create-form,
+.mini-link-form,
+.client-answer-form,
+.demo-confirmation-form {
+  display: grid;
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.tax-file-inline-form {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin: var(--space-4) 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: rgba(17, 17, 31, 0.58);
+}
+
+.tax-file-create-form {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.mini-link-form {
+  grid-template-columns: minmax(130px, 1fr) minmax(120px, 1fr) minmax(110px, auto);
+  width: min(100%, 520px);
+}
+
+.client-answer-form {
+  grid-template-columns: minmax(180px, 1fr) auto;
+  width: min(100%, 460px);
+}
+
+.demo-confirmation-panel {
+  border-color: rgba(34, 197, 94, 0.32);
+  background:
+    linear-gradient(180deg, rgba(16, 185, 129, 0.1), rgba(255, 255, 255, 0.012)),
+    var(--color-surface-raised);
+}
+
+.demo-confirmation-form {
+  grid-template-columns: minmax(220px, 360px);
+  margin-top: var(--space-3);
+}
+
+.tax-country-lock {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: rgba(17, 17, 31, 0.58);
+}
+
+.stacked-form,
+.action-details form {
+  display: grid;
+  gap: var(--space-3);
+  min-width: min(420px, 72vw);
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: rgba(17, 17, 31, 0.78);
+}
+
+.stacked-form label,
+.action-details label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.action-details {
+  position: relative;
+}
+
+.action-details > summary {
+  list-style: none;
+}
+
+.action-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.compact-actions {
+  min-width: 190px;
+}
+
+.enum-badge {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: var(--space-1);
+  padding: 2px 6px;
+  border: 1px solid rgba(139, 92, 246, 0.32);
+  border-radius: 6px;
+  background: rgba(139, 92, 246, 0.12);
+  color: #c4b5fd;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.operations-table th,
+.operations-table td {
+  min-width: 110px;
+}
+
+.mini-link-form button,
+.tax-file-inline-form button,
+.tax-file-create-form button,
+.client-answer-form button,
+.stacked-form button {
+  align-self: end;
+}
+
+.tax-file-kpis {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.account-linking-panel {
+  overflow-x: visible;
+}
+
 .filter-bar,
 .paste-form form,
 .tax-settings form {
@@ -474,7 +748,8 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: 38px;
   padding: 8px 10px;
@@ -487,6 +762,15 @@ select {
 }
 
 input::placeholder {
+  color: rgba(148, 163, 184, 0.62);
+}
+
+textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+textarea::placeholder {
   color: rgba(148, 163, 184, 0.62);
 }
 
@@ -635,6 +919,7 @@ td span,
 mark,
 .badge {
   display: inline-flex;
+  flex-shrink: 0;
   gap: var(--space-1);
   align-items: center;
   justify-content: center;
@@ -648,7 +933,8 @@ mark,
   font-size: 12px;
   font-weight: var(--font-weight-semibold);
   line-height: 1.15;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .positive {
@@ -989,6 +1275,79 @@ dd {
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
+.tax-playbook {
+  border-color: rgba(34, 197, 94, 0.24);
+  background: linear-gradient(180deg, rgba(20, 83, 45, 0.18), rgba(17, 17, 31, 0.78));
+}
+
+.tax-advice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-4);
+}
+
+.tax-advice-card {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: var(--radius-card);
+  background: rgba(15, 23, 42, 0.54);
+}
+
+.tax-advice-card-primary {
+  border-color: rgba(34, 197, 94, 0.34);
+  background: rgba(6, 78, 59, 0.26);
+}
+
+.tax-advice-topline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.tax-advice-card h3 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 18px;
+}
+
+.tax-advice-card p,
+.tax-advice-card ul {
+  margin: 0;
+}
+
+.tax-advice-card ul {
+  padding-left: 18px;
+}
+
+.tax-impact {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid rgba(34, 197, 94, 0.22);
+  border-radius: var(--radius-control);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.tax-impact span {
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.tax-impact strong {
+  color: var(--status-success-text);
+  font-size: 24px;
+  line-height: 1.1;
+}
+
 .tax-settings {
   display: grid;
   grid-template-columns: minmax(230px, 320px) minmax(0, 1fr);
@@ -1138,6 +1497,10 @@ dd {
   .tax-kpi-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .ai-findings-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 900px) {
@@ -1166,6 +1529,13 @@ dd {
   .kpi-grid,
   .tax-kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .proof-grid,
+  .faq-grid,
+  .ai-findings-grid,
+  .tax-split-grid {
+    grid-template-columns: 1fr;
   }
 
   .tax-settings,

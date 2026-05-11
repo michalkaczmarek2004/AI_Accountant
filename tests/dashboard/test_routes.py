@@ -9,7 +9,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from ai_accountant import DATAFRAME_COLUMNS, HeliusAuthenticationError, HeliusRateLimitError
-from ai_accountant.dashboard.demo import DEMO_DATASET_LABEL, DEMO_WALLET_ADDRESS
+from ai_accountant.dashboard.demo import TEST_DATASET_LABEL, TEST_WALLET_ADDRESS
 from ai_accountant.dashboard.server import create_app
 
 WALLET = "86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY"
@@ -60,6 +60,8 @@ class LandingRouteTests(_RouteCase):
     def test_get_landing_renders(self) -> None:
         resp = self.client.get("/")
         self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"AI Accountant for US Crypto Taxes", resp.data)
+        self.assertIn(b"Run US Tax Demo", resp.data)
         self.assertIn(b"Solana wallet address", resp.data)
 
     def test_post_invalid_address_returns_400_with_message(self) -> None:
@@ -76,24 +78,25 @@ class LandingRouteTests(_RouteCase):
     def test_demo_route_seeds_cache_and_redirects(self) -> None:
         resp = self.client.post("/demo")
         self.assertEqual(resp.status_code, 303)
-        self.assertIn(DEMO_WALLET_ADDRESS, resp.headers["Location"])
-        self.assertTrue((self.tmp / DEMO_WALLET_ADDRESS / "transactions.pkl").exists())
-        wallet_resp = self.client.get(f"/wallet/{DEMO_WALLET_ADDRESS}")
+        self.assertIn(TEST_WALLET_ADDRESS, resp.headers["Location"])
+        self.assertTrue((self.tmp / TEST_WALLET_ADDRESS / "transactions.pkl").exists())
+        wallet_resp = self.client.get(f"/wallet/{TEST_WALLET_ADDRESS}")
         self.assertEqual(wallet_resp.status_code, 200)
-        self.assertIn(DEMO_DATASET_LABEL.encode(), wallet_resp.data)
-        self.assertIn(b"/tax-country?tax_country=US", wallet_resp.data)
+        self.assertIn(TEST_DATASET_LABEL.encode(), wallet_resp.data)
         self.assertIn(b"ai-chart-line", wallet_resp.data)
         self.assertIn(b"ai-chart-bar", wallet_resp.data)
-        self.assertIn(b"23.1%", wallet_resp.data)
-        self.assertIn(b"7.7%", wallet_resp.data)
-        self.assertNotIn(b"7.692307692307", wallet_resp.data)
+        self.assertIn(b"Jupiter", wallet_resp.data)
+        self.assertIn(b"Magic Eden", wallet_resp.data)
+        self.assertNotIn(b"12.500000000000", wallet_resp.data)
         self.assertNotIn(b"Pages:", wallet_resp.data)
 
-        tax_resp = self.client.get(f"/wallet/{DEMO_WALLET_ADDRESS}/tax")
+        tax_resp = self.client.get(f"/wallet/{TEST_WALLET_ADDRESS}/tax")
         self.assertEqual(tax_resp.status_code, 200)
         self.assertIn(b"Tax country", tax_resp.data)
         self.assertIn(b"United States notes", tax_resp.data)
         self.assertIn(b"IRS digital assets guidance", tax_resp.data)
+        self.assertNotIn(b"Poland", tax_resp.data)
+        self.assertNotIn(b"PIT-38", tax_resp.data)
         self.assertIn(b"Tax Deadlines", tax_resp.data)
         self.assertIn(b'data-ack-scope="tax-deadlines"', tax_resp.data)
         self.assertIn(b'data-ack-kind="deadline"', tax_resp.data)
@@ -105,8 +108,6 @@ class LandingRouteTests(_RouteCase):
         self.assertIn(b"How to calculate:", tax_resp.data)
         self.assertIn(b"Form 8949", tax_resp.data)
         self.assertIn(b"Deadline reminder", tax_resp.data)
-        self.assertIn(b"Fee-only unknown program interaction", tax_resp.data)
-        self.assertIn(b"Mark reviewed", tax_resp.data)
         self.assertIn(b"Why this needs review", tax_resp.data)
         self.assertIn(b"Suggested next step", tax_resp.data)
         self.assertIn(b"Tax/accounting note", tax_resp.data)
