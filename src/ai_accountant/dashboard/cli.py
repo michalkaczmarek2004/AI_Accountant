@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_PORT = 8770
+DEFAULT_REVIEW_PORT = 8765
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_MAX_PAGES = 5
 DEFAULT_CACHE_DIR = ".ai_accountant/wallets"
@@ -35,10 +36,20 @@ def _build_parser() -> argparse.ArgumentParser:
 
     serve = sub.add_parser("serve", help="Start the local Flask web UI.")
     serve.add_argument("--host", default=DEFAULT_HOST)
-    serve.add_argument("--port", type=int, default=DEFAULT_PORT)
+    serve.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help=f"Port to bind (default: {DEFAULT_PORT} for presentation, {DEFAULT_REVIEW_PORT} with --review-mode).",
+    )
     serve.add_argument("--api-key", default=None)
     serve.add_argument("--max-pages", type=int, default=DEFAULT_MAX_PAGES)
     serve.add_argument("--cache-dir", default=DEFAULT_CACHE_DIR)
+    serve.add_argument(
+        "--review-mode",
+        action="store_true",
+        help="Run as the judge-review version: hides presentation/demo controls. Defaults to port 8765.",
+    )
 
     fetch = sub.add_parser(
         "fetch", help="Fetch one wallet into the cache without starting a server."
@@ -100,16 +111,21 @@ def _run_serve(args: argparse.Namespace) -> int:
         print(str(exc), file=sys.stderr)
         return 1
 
+    presentation_mode = not bool(getattr(args, "review_mode", False))
+    port = args.port if args.port is not None else (DEFAULT_PORT if presentation_mode else DEFAULT_REVIEW_PORT)
+
     app = create_app(
         helius_api_key=api_key,
         max_pages=args.max_pages,
         cache_root=cache_dir,
+        presentation_mode=presentation_mode,
     )
-    print(f"Open http://{args.host}:{args.port} in your browser. Ctrl-C to stop.")
+    mode_label = "presentation" if presentation_mode else "judge-review"
+    print(f"Open http://{args.host}:{port} in your browser ({mode_label} mode). Ctrl-C to stop.")
     try:
-        app.run(host=args.host, port=args.port, debug=False)
+        app.run(host=args.host, port=port, debug=False)
     except OSError as exc:
-        print(f"Could not bind {args.host}:{args.port}: {exc}", file=sys.stderr)
+        print(f"Could not bind {args.host}:{port}: {exc}", file=sys.stderr)
         return 1
     return 0
 

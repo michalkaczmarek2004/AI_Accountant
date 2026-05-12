@@ -32,7 +32,7 @@ from ...tax_assistant import (
     yearly_summary,
 )
 from .. import cache as cache_mod
-from ..demo import TEST_WALLET_ADDRESS, build_test_cache_payloads
+from ..demo import TEST_DATASET_LABEL, TEST_WALLET_ADDRESS, build_test_cache_payloads
 from ..fetcher import DashboardError, RefreshLocked, run_fetch
 from ..filters import FilterSpec
 from ..pdf_report import build_wallet_pdf_report
@@ -53,7 +53,9 @@ from ..tax_files import (
     create_test_tax_file,
     matchInternalTransfers,
     tax_estimate_plan,
+    tax_file_cpa_ready_export_frame,
     tax_file_export_frame,
+    tax_file_yearly_summary,
     tax_file_dashboard_context,
     tax_files_overview,
     tax_loss_harvesting_advice,
@@ -65,15 +67,51 @@ ADDR_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
 SIG_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{80,90}$")
 
 
+def _landing_wallet_rows(wallets: list[Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    demo_wallet_index = 0
+    for wallet in wallets:
+        address = str(getattr(wallet, "address", ""))
+        dataset_label = str(getattr(wallet, "dataset_label", "") or "")
+        public_dataset_label = _public_dataset_label(dataset_label)
+        display_address = f"{address[:8]}...{address[-6:]}" if len(address) > 14 else address
+        if public_dataset_label == TEST_DATASET_LABEL:
+            demo_wallet_index += 1
+            display_address = f"Solana Wallet {demo_wallet_index}"
+        rows.append(
+            {
+                "address": address,
+                "display_address": display_address,
+                "dataset_label": public_dataset_label,
+                "row_count": int(getattr(wallet, "row_count", 0) or 0),
+                "earliest_tx": str(getattr(wallet, "earliest_tx", "") or ""),
+                "latest_tx": str(getattr(wallet, "latest_tx", "") or ""),
+                "fetched_at": str(getattr(wallet, "fetched_at", "") or ""),
+            }
+        )
+    return rows
+
+
+def _public_dataset_label(value: str) -> str:
+    return value.replace("Demo dataset: ", "").replace("Synthetic demo data", "Sample wallet activity")
+
+
 def register_routes(app: Flask) -> None:
     @app.get("/")
     def landing() -> Response:
-        wallets = cache_mod.list_wallets(cache_root=_cache_root())
         return render_template(
             "landing.html.j2",
-            wallets=wallets,
             error=None,
             address_input="",
+            notice=_notice_arg(),
+        )
+
+    @app.get("/wallets")
+    def wallets_route() -> Response:
+        wallets = _landing_wallet_rows(cache_mod.list_wallets(cache_root=_cache_root()))
+        return render_template(
+            "wallets.html.j2",
+            wallets=wallets,
             notice=_notice_arg(),
         )
 
@@ -81,11 +119,9 @@ def register_routes(app: Flask) -> None:
     def landing_submit() -> Response:
         address = (request.form.get("address") or "").strip()
         if not ADDR_RE.match(address):
-            wallets = cache_mod.list_wallets(cache_root=_cache_root())
             return (
                 render_template(
                     "landing.html.j2",
-                    wallets=wallets,
                     error="That doesn't look like a Solana wallet address.",
                     address_input=address,
                     notice=_notice_arg(),
@@ -95,11 +131,9 @@ def register_routes(app: Flask) -> None:
         try:
             cached = cache_mod.read(address, cache_root=_cache_root())
         except InvalidSolanaAddressError:
-            wallets = cache_mod.list_wallets(cache_root=_cache_root())
             return (
                 render_template(
                     "landing.html.j2",
-                    wallets=wallets,
                     error="That doesn't look like a Solana wallet address.",
                     address_input=address,
                     notice=_notice_arg(),
@@ -113,8 +147,7 @@ def register_routes(app: Flask) -> None:
                 return _render_error(exc), exc.http_status
         return redirect(url_for("wallet_page_route", address=address), code=303)
 
-    @app.post("/demo")
-    def demo_route() -> Response:
+    def _seed_presentation_demo() -> None:
         payloads = build_test_cache_payloads()
         for address, df, meta in payloads:
             cache_mod.write(address, df, meta, cache_root=_cache_root())
@@ -123,7 +156,20 @@ def register_routes(app: Flask) -> None:
             primary_address=payloads[0][0],
             secondary_address=payloads[1][0],
         )
-        return redirect(url_for("wallet_page_route", address=TEST_WALLET_ADDRESS), code=303)
+
+    @app.post("/demo")
+    def demo_route() -> Response:
+        if not _presentation_mode():
+            abort(404)
+        _seed_presentation_demo()
+        return redirect(url_for("tax_file_detail_route", tax_file_id=TEST_TAX_FILE_ID), code=303)
+
+    @app.post("/demo/reset")
+    def reset_demo_route() -> Response:
+        if not _presentation_mode():
+            abort(404)
+        _seed_presentation_demo()
+        return redirect(url_for("tax_file_detail_route", tax_file_id=TEST_TAX_FILE_ID, notice="demo-reset"), code=303)
 
     @app.get("/wallet/<address>")
     def wallet_page_route(address: str) -> Response:
@@ -511,6 +557,8 @@ def register_routes(app: Flask) -> None:
                 "tax_loss_harvesting": loss,
                 "tax_payment_plan": tax_plan,
                 "demo_us_only": bool(tax_plan.get("demo_us_only")),
+                "yearly": tax_file_yearly_summary(tax_file, df, tax_payment_plan=tax_plan),
+                "yearly_tax_file_summary": True,
             }
         )
         if tax_plan.get("demo_us_only"):
@@ -524,15 +572,11 @@ def register_routes(app: Flask) -> None:
         if tax_file is None:
             abort(404)
         df = _tax_file_frame_or_404(tax_file_id, store=store)
-        export = tax_file_export_frame(tax_file, df)
-        buf = io.StringIO()
-        export.to_csv(buf, index=False)
-        return Response(
-            buf.getvalue(),
-            mimetype="text/csv; charset=utf-8",
-            headers={
-                "Content-Disposition": f'attachment; filename="{tax_file_id[:8]}_tax_file.csv"',
-            },
+        export = tax_file_cpa_ready_export_frame(tax_file, df)
+        return _csv_download_response(
+            export,
+            filename=f"{tax_file.name.replace(' ', '_')}_CPA_ready.csv",
+            excel_compatible=True,
         )
 
     @app.get("/tax-files/<tax_file_id>/tax-export.json")
@@ -646,6 +690,10 @@ def _factory():
     return current_app.config.get("AI_ACCOUNTANT_FETCHER_FACTORY")
 
 
+def _presentation_mode() -> bool:
+    return bool(current_app.config.get("AI_ACCOUNTANT_PRESENTATION_MODE", True))
+
+
 def _tax_country_arg() -> str | None:
     return request.args.get("tax_country") or request.args.get("country")
 
@@ -659,7 +707,7 @@ def _notice_arg() -> str:
         "account-removed": "Account removed from this tax file. Wallet cache was kept.",
         "link-failed": "Could not link that wallet to a tax file.",
         "match-updated": "Internal transfer match status updated.",
-        "client-answer-saved": "Client answer saved.",
+        "client-answer-saved": "Your confirmation was added to the audit trail and will be included in the CPA-ready package.",
         "client-answer-cleared": "Client answer cleared and item reopened.",
         "override-saved": "Accountant override saved.",
         "override-reset": "Accountant override reset.",
@@ -668,9 +716,30 @@ def _notice_arg() -> str:
         "review-item-reopened": "Review item reopened.",
         "review-item-not-found": "That review item was not found.",
         "tax-file-archived": "Tax file archived.",
+        "demo-reset": "Tax review reset to the initial review state.",
         "note-required": "A note or reason is required for that action.",
     }
     return messages.get(key, "")
+
+
+def _csv_download_response(
+    export: pd.DataFrame,
+    *,
+    filename: str,
+    excel_compatible: bool = False,
+) -> Response:
+    buf = io.StringIO()
+    export.to_csv(buf, index=False, lineterminator="\r\n")
+    body = buf.getvalue()
+    if excel_compatible:
+        body = "\ufeffsep=,\r\n" + body
+    return Response(
+        body,
+        mimetype="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
 
 
 def _tax_file_frame_or_404(

@@ -17,6 +17,7 @@ def create_app(
     max_pages: int | None,
     cache_root: Path,
     fetcher_factory: Callable[[], Any] | None = None,
+    presentation_mode: bool = True,
 ) -> Flask:
     app = Flask(
         __name__,
@@ -28,7 +29,13 @@ def create_app(
         AI_ACCOUNTANT_MAX_PAGES=max_pages,
         AI_ACCOUNTANT_CACHE_ROOT=Path(cache_root),
         AI_ACCOUNTANT_FETCHER_FACTORY=fetcher_factory,
+        AI_ACCOUNTANT_PRESENTATION_MODE=bool(presentation_mode),
     )
+
+    @app.context_processor
+    def _inject_presentation_mode() -> dict[str, bool]:
+        return {"presentation_mode": bool(app.config.get("AI_ACCOUNTANT_PRESENTATION_MODE", True))}
+
     register_routes(app)
     return app
 

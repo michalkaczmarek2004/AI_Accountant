@@ -1,0 +1,48 @@
+{% extends "base.html.j2" %}
+{% block title %}Wallets — AI Accountant{% endblock %}
+{% block body %}
+<section class="wallet-header">
+  <div>
+    <p class="eyebrow">Wallets</p>
+    <h1>Cached wallets</h1>
+    <p class="meta-line">Open a cached wallet dashboard or forget local cached data.</p>
+  </div>
+  <div class="header-actions">
+    <a href="{{ url_for('landing') }}" class="button secondary">Back to US Tax Review</a>
+    <a href="{{ url_for('tax_files_route') }}" class="button secondary">Tax Files</a>
+  </div>
+</section>
+
+{% if notice %}
+<section class="notice-panel"><p>{{ notice }}</p></section>
+{% endif %}
+
+<section class="recent">
+  {% if wallets %}
+  <table>
+    <thead><tr><th>Address</th><th>Transactions</th><th>Range</th><th>Fetched</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for w in wallets %}
+      <tr>
+        <td>
+          <a href="{{ url_for('wallet_page_route', address=w.address) }}"><code>{{ w.display_address }}</code></a>
+          {% if w.dataset_label %}<span class="muted">{{ w.dataset_label }}</span>{% endif %}
+        </td>
+        <td>{{ w.row_count }}</td>
+        <td>{{ w.earliest_tx or '—' }} → {{ w.latest_tx or '—' }}</td>
+        <td>{{ w.fetched_at[:16] | replace('T', ' ') }} UTC</td>
+        <td class="row-actions">
+          <a class="button secondary" href="{{ url_for('wallet_page_route', address=w.address) }}">Open Dashboard</a>
+          <form method="post" action="{{ url_for('forget_route', address=w.address) }}" class="inline-form">
+            <button type="submit" class="link-button" title="Forget cache">Forget</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No wallets cached yet. <a href="{{ url_for('landing') }}">Paste a Solana address on the US Tax Review page</a> to fetch its activity.</p>
+  {% endif %}
+</section>
+{% endblock %}

@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from ai_accountant import DATAFRAME_COLUMNS, HeliusAuthenticationError, HeliusRateLimitError
 from ai_accountant.dashboard.demo import TEST_DATASET_LABEL, TEST_WALLET_ADDRESS
 from ai_accountant.dashboard.server import create_app
+from ai_accountant.dashboard.tax_files import TEST_TAX_FILE_ID
 
 WALLET = "86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY"
 WALLET_BAD = "not-a-wallet"
@@ -61,7 +62,7 @@ class LandingRouteTests(_RouteCase):
         resp = self.client.get("/")
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"AI Accountant for US Crypto Taxes", resp.data)
-        self.assertIn(b"Run US Tax Demo", resp.data)
+        self.assertIn(b"Run US Tax Review", resp.data)
         self.assertIn(b"Solana wallet address", resp.data)
 
     def test_post_invalid_address_returns_400_with_message(self) -> None:
@@ -78,8 +79,12 @@ class LandingRouteTests(_RouteCase):
     def test_demo_route_seeds_cache_and_redirects(self) -> None:
         resp = self.client.post("/demo")
         self.assertEqual(resp.status_code, 303)
-        self.assertIn(TEST_WALLET_ADDRESS, resp.headers["Location"])
+        self.assertIn(TEST_TAX_FILE_ID, resp.headers["Location"])
         self.assertTrue((self.tmp / TEST_WALLET_ADDRESS / "transactions.pkl").exists())
+        tax_file_resp = self.client.get(resp.headers["Location"])
+        self.assertEqual(tax_file_resp.status_code, 200)
+        self.assertIn(b"AI Accountant Findings", tax_file_resp.data)
+        self.assertIn(b"Review Mode", tax_file_resp.data)
         wallet_resp = self.client.get(f"/wallet/{TEST_WALLET_ADDRESS}")
         self.assertEqual(wallet_resp.status_code, 200)
         self.assertIn(TEST_DATASET_LABEL.encode(), wallet_resp.data)
@@ -112,6 +117,32 @@ class LandingRouteTests(_RouteCase):
         self.assertIn(b"Suggested next step", tax_resp.data)
         self.assertIn(b"Tax/accounting note", tax_resp.data)
         self.assertNotIn(b"No action needed", tax_resp.data)
+
+        unified_tax_resp = self.client.get(f"/tax-files/{TEST_TAX_FILE_ID}/tax")
+        self.assertEqual(unified_tax_resp.status_code, 200)
+        self.assertIn(b"Tax Deadlines", unified_tax_resp.data)
+        self.assertIn(b'data-ack-scope="tax-deadlines"', unified_tax_resp.data)
+
+
+class WalletsListRouteTests(_RouteCase):
+    def test_empty_wallets_route_renders_200(self) -> None:
+        resp = self.client.get("/wallets")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Cached wallets", resp.data)
+
+    def test_seeded_wallet_appears_in_wallets_route(self) -> None:
+        self.client.post("/", data={"address": WALLET})
+        resp = self.client.get("/wallets")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(WALLET[:8].encode(), resp.data)
+        self.assertIn(b"Open Dashboard", resp.data)
+
+    def test_landing_no_longer_contains_cached_wallets_table(self) -> None:
+        self.client.post("/", data={"address": WALLET})
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn(b"Cached wallets", resp.data)
+        self.assertIn(b"View cached wallets", resp.data)
 
 
 class WalletRouteTests(_RouteCase):

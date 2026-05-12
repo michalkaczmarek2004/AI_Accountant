@@ -8,17 +8,21 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="{{ url_for('landing') }}">AI Accountant</a>
+    <a class="brand" href="{{ url_for('landing') }}">
+      <img class="brand-logo" src="{{ url_for('static', filename='logo.png') }}" alt="AI Accountant logo">
+      <span class="brand-text">AI Accountant</span>
+    </a>
     <nav>
-      <a href="{{ url_for('landing') }}">Wallets</a>
+      <a href="{{ url_for('landing') }}">US Tax Review</a>
       <a href="{{ url_for('tax_files_route') }}">Tax Files</a>
+      <a href="{{ url_for('wallets_route') }}">Wallets</a>
     </nav>
   </header>
   <main class="page">
     {% block body %}{% endblock %}
   </main>
   <footer class="footer">
-    <span>Local dashboard — data shown is cached on disk and refreshed on demand.</span>
+    <span>CPA-ready draft package, not final tax filing. Final filing requires taxpayer or CPA review.</span>
   </footer>
   <script src="{{ url_for('static', filename='dashboard.js') }}" defer></script>
 </body>

@@ -1,6 +1,7 @@
 {% extends "base.html.j2" %}
 {% block title %}{% if unified_tax_assistant %}Unified Tax Assistant — {{ tax_file.name }}{% else %}Tax Assistant — {{ address_short }}{% endif %} — AI Accountant{% endblock %}
 {% block body %}
+{% set has_tax_payment_plan = tax_payment_plan is defined and tax_payment_plan.available %}
 
 <section class="wallet-header">
   <div>
@@ -8,6 +9,7 @@
     {% if unified_tax_assistant %}
     <h1>{{ tax_file.name }}</h1>
     <p class="meta-line">{{ tax_file.tax_year }} • {{ tax_file.tax_country }} • {{ tax_file.entity_type }}</p>
+    {% if has_tax_payment_plan %}<p><mark class="neutral">Review Mode</mark></p>{% endif %}
     {% else %}
     <h1><code title="{{ address }}">{{ address_short }}</code></h1>
     {% endif %}
@@ -27,8 +29,6 @@
 <div class="tax-disclaimer">
   This is not financial or tax advice. Always consult a qualified tax professional.
 </div>
-
-{% set has_tax_payment_plan = tax_payment_plan is defined and tax_payment_plan.available %}
 
 <section class="tax-settings">
   {% if demo_us_only|default(false) or has_tax_payment_plan %}
@@ -162,6 +162,28 @@
     <article class="assumption-card"><strong>Estimate assumptions</strong><span>{{ assumption }}</span></article>
     {% endfor %}
   </div>
+  <div class="tax-breakdown-grid">
+    <article class="tax-split-card">
+      <strong>Estimated federal tax breakdown</strong>
+      <table>
+        <tbody>
+          {% for row in tax_payment_plan.estimate_breakdown %}
+          <tr><td>{{ row.label }}</td><td><strong>{{ row.value }}</strong></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </article>
+    <article class="tax-split-card">
+      <strong>Potential federal tax reduction breakdown</strong>
+      <table>
+        <tbody>
+          {% for row in tax_payment_plan.planning_breakdown %}
+          <tr><td>{{ row.label }}</td><td><strong>{{ row.value }}</strong></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </article>
+  </div>
   <div class="tax-advice-grid">
     {% for card in tax_payment_plan.cards %}
     <article class="tax-advice-card {% if loop.index == 1 %}tax-advice-card-primary{% endif %}">
@@ -247,11 +269,10 @@
     </article>
     {% endfor %}
   </div>
-  <p class="muted">Estimates use demo SOL/fiat rates where exact FMV is missing. Replace with transaction-time fair market values before filing.</p>
+  <p class="muted">Estimates use review SOL/fiat assumptions where exact FMV is missing. Replace with transaction-time fair market values before filing.</p>
 </section>
 {% endif %}
 
-{% if not unified_tax_assistant %}
 <section class="report-section tax-ack-scope" data-ack-scope="tax-deadlines">
   <details class="tax-deadlines-panel">
     <summary>
@@ -286,7 +307,6 @@
   {% endif %}
   </details>
 </section>
-{% endif %}
 
 {% if unified_tax_assistant and tax_loss_harvesting and not has_tax_payment_plan %}
 <section class="report-section">
@@ -434,6 +454,36 @@
 <section class="report-section">
   <h2>Yearly Summary</h2>
   {% if yearly %}
+  {% if yearly_tax_file_summary|default(false) %}
+  <table>
+    <thead>
+      <tr>
+        <th>Year</th>
+        <th>Realized Gain</th>
+        <th>Ordinary Income</th>
+        <th>Missing Basis</th>
+        <th>Fees</th>
+        <th>Estimated Federal Tax</th>
+        <th>Taxable Events</th>
+        <th>Review Items</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in yearly %}
+      <tr>
+        <td><strong>{{ r.year }}</strong></td>
+        <td>{{ r.realized_gain_usd }}</td>
+        <td>{{ r.ordinary_income_usd }}</td>
+        <td>{{ r.missing_basis_usd }}</td>
+        <td>{{ r.fees_usd }}</td>
+        <td>{{ r.estimated_federal_tax_usd }}</td>
+        <td>{{ r.taxable_count }}</td>
+        <td>{{ r.review_items }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
   <table>
     <thead>
       <tr>
@@ -456,6 +506,7 @@
       {% endfor %}
     </tbody>
   </table>
+  {% endif %}
   {% else %}
   <p class="empty">No yearly data available.</p>
   {% endif %}
@@ -466,7 +517,7 @@
     <p class="eyebrow">Export</p>
     {% if unified_tax_assistant %}
     <h2>CPA-ready package</h2>
-    <p class="muted">CSV and JSON combine owned accounts. Confirmed internal transfers are not treated as income or outgoing taxable events. Draft Form 8949 fields, Schedule D summary inputs, review items, missing data, audit trail, and confidence scores stay traceable.</p>
+    <p class="muted">This package is designed for taxpayer/CPA review. It does not file your tax return automatically. Draft Form 8949 fields, Schedule D summary inputs, review items, missing data, audit trail, and confidence scores stay traceable.</p>
     {% else %}
     <h2>Draft tax report</h2>
     <p class="muted">PDF is the primary handoff format. CSV and JSON remain available for accountants, reconciliation and developer workflows.</p>
@@ -481,14 +532,20 @@
   </div>
   <div class="export-secondary">
     {% if unified_tax_assistant %}
-    <a href="{{ url_for('tax_file_export_json_route', tax_file_id=tax_file.id) }}">Download CPA JSON package</a>
     <a href="{{ url_for('tax_file_detail_route', tax_file_id=tax_file.id) }}">Back to Tax File Dashboard</a>
+    <details class="action-details advanced-export-links">
+      <summary class="link-button">Advanced / CPA workspace</summary>
+      <a href="{{ url_for('tax_file_export_json_route', tax_file_id=tax_file.id) }}">Download CPA JSON package</a>
+    </details>
     {% else %}
     <a href="{{ url_for('tax_export_csv_route', address=address) }}">Download Tax CSV</a>
     <a href="{{ url_for('tax_summary_csv_route', address=address) }}">Download Yearly Summary CSV</a>
     <a href="{{ url_for('tax_export_json_route', address=address) }}">Download accountant JSON</a>
     {% endif %}
   </div>
+  {% if unified_tax_assistant %}
+  <p class="final-value-line">From Solana wallet chaos to CPA-ready tax review in minutes.</p>
+  {% endif %}
 </section>
 
 {% endif %}

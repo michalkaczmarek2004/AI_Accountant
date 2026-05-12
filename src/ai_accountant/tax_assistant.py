@@ -448,7 +448,7 @@ _TAX_ADVICE_ASSUMPTIONS: dict[str, dict[str, Any]] = {
         "currency": "USD",
         "sol_rate": Decimal("200"),
         "tax_rate": Decimal("0.24"),
-        "rate_label": "demo 24% short-term/ordinary rate",
+        "rate_label": "24% short-term/ordinary rate assumption",
         "money_prefix": "$",
         "money_suffix": "",
     },
@@ -890,9 +890,9 @@ def _advice_tax_effect(amount_sol: Decimal, tax_country: str) -> tuple[str, str]
     return (
         _money(effect, currency),
         (
-            f"Demo estimate: {_fmt(amount_sol)} SOL x {_money(_safe_decimal(assumptions['sol_rate']), currency)}/SOL "
+            f"Draft estimate: {_fmt(amount_sol)} SOL x {_money(_safe_decimal(assumptions['sol_rate']), currency)}/SOL "
             f"x {assumptions['rate_label']} = {_money(effect, currency)}. "
-            "Replace demo rates with actual FMV before filing."
+            "Replace review assumptions with actual FMV before filing."
         ),
     )
 

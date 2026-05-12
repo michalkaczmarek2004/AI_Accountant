@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import time
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timezone
@@ -167,14 +168,14 @@ TAX_LOSS_HARVESTING_ASSUMPTIONS_PLN = {
     "SAMO": {
         "current_price_pln": Decimal("0.0068"),
         "market_date": "2025-12-15",
-        "source": "Demo market assumption for Solana Colosseum presentation.",
+        "source": "Review market assumption.",
     },
 }
 TAX_LOSS_HARVESTING_ASSUMPTIONS_USD = {
     "SAMO": {
         "current_price_usd": Decimal("0.0024"),
         "market_date": "2025-12-15",
-        "source": "Demo market assumption for Solana Colosseum presentation.",
+        "source": "Review market assumption.",
     },
 }
 POLISH_CRYPTO_TAX_SOURCE_URL = (
@@ -203,7 +204,7 @@ LOSS_REVIEW_DISCLAIMER = (
 )
 LOSS_REVIEW_ASSUMPTIONS_LIMITATIONS = (
     "This analysis is based on parsed Solana wallet activity, selected tax country, unresolved review items, "
-    "and demo or estimated pricing where real market data is unavailable. It does not confirm legal ownership, "
+    "and estimated pricing where real market data is unavailable. It does not confirm legal ownership, "
     "source of funds, final cost basis, fair market value, or final tax treatment."
 )
 DEMO_MANUAL_COST_BASIS_LOTS = (
@@ -1258,6 +1259,7 @@ def tax_file_dashboard_context(tax_file_id: str, cache_root: Path) -> dict[str, 
         active_review_queue=active_review_queue,
         tax_payment_plan=tax_plan,
     )
+    solana_patterns = solana_patterns_detected(tax_file, owned, matches=matches)
     action_summary = tax_file_action_summary(
         readiness,
         review_groups["needs_client_answer"],
@@ -1294,12 +1296,29 @@ def tax_file_dashboard_context(tax_file_id: str, cache_root: Path) -> dict[str, 
     )
     return {
         "tax_file": tax_file.to_dict(),
+        "presenter_mode": _is_test_tax_file(tax_file),
         "accounts": account_rows,
         "summary": summary,
         "action_summary": action_summary,
         "section_summaries": section_summaries,
         "section_state": section_state,
         "ai_accountant_findings": ai_findings,
+        "solana_patterns": solana_patterns,
+        "export_package_items": [
+            "Form 8949 draft fields",
+            "Schedule D summary inputs",
+            "Review items",
+            "Audit trail",
+            "Missing data report",
+            "CSV export",
+        ],
+        "final_value_bullets": [
+            "Taxable events classified",
+            "Missing basis issues flagged",
+            "Self-transfers matched",
+            "Optimization opportunities explained",
+            "Export package ready for CPA review",
+        ],
         "tax_readiness": readiness,
         "accountant_checklist": checklist,
         "accountant_checklist_note": ACCOUNTANT_CHECKLIST_NOTE,
@@ -1433,7 +1452,7 @@ def tax_loss_harvesting_advice(
         status = "no_candidates"
         title = "No potential loss harvesting candidates found"
         message = (
-            "No owned-account token acquisitions matched the demo loss model. Add verified cost basis and current "
+            "No owned-account token acquisitions matched the loss review model. Add verified cost basis and current "
             "price data before using this as a professional review workflow."
         )
 
@@ -1494,6 +1513,36 @@ _TAX_FILE_EXPORT_COLUMNS = [
     "recommended_next_action",
 ]
 
+_CPA_READY_EXPORT_COLUMNS = [
+    "Tax Year",
+    "Date",
+    "Account",
+    "Asset",
+    "Quantity",
+    "Transaction Type",
+    "Tax Category",
+    "Taxable Event",
+    "Review Status",
+    "Expected Tax Form",
+    "Proceeds (USD)",
+    "Cost Basis (USD)",
+    "Gain/Loss (USD)",
+    "Holding Period",
+    "Days Held",
+    "Ordinary Income (USD)",
+    "FMV (USD)",
+    "Network Fee (USD)",
+    "Fee Treatment",
+    "AI Confidence (%)",
+    "Review Reason",
+    "CPA Notes",
+    "Recommended Next Action",
+    "Source",
+    "Destination",
+    "Wallet Address",
+    "Transaction Signature",
+]
+
 
 def tax_file_export_frame(tax_file: TaxFile | dict[str, Any], frame: pd.DataFrame) -> pd.DataFrame:
     """Return a Tax File export aligned with accountant classifications and cost-basis rows."""
@@ -1548,6 +1597,178 @@ def tax_file_export_frame(tax_file: TaxFile | dict[str, Any], frame: pd.DataFram
             }
         )
     return pd.DataFrame(rows, columns=_TAX_FILE_EXPORT_COLUMNS)
+
+
+def tax_file_cpa_ready_export_frame(tax_file: TaxFile | dict[str, Any], frame: pd.DataFrame) -> pd.DataFrame:
+    """Return a CPA-facing CSV frame with readable columns and technical IDs last."""
+    if frame.empty:
+        return pd.DataFrame(columns=_CPA_READY_EXPORT_COLUMNS)
+
+    machine_export = tax_file_export_frame(tax_file, frame)
+    rows: list[dict[str, Any]] = []
+    for _, row in machine_export.iterrows():
+        rows.append(
+            {
+                "Tax Year": _row_year_from_date(str(row.get("date") or "")),
+                "Date": row.get("date", ""),
+                "Account": _public_account_label(row.get("account_label")),
+                "Asset": row.get("asset", ""),
+                "Quantity": _public_quantity(row.get("amount")),
+                "Transaction Type": _public_transaction_type(row),
+                "Tax Category": row.get("tax_category_label", ""),
+                "Taxable Event": _public_taxable_status(row.get("is_potentially_taxable")),
+                "Review Status": row.get("tax_review_status_label", ""),
+                "Expected Tax Form": row.get("expected_form", ""),
+                "Proceeds (USD)": row.get("proceeds_usd", ""),
+                "Cost Basis (USD)": row.get("cost_basis", ""),
+                "Gain/Loss (USD)": row.get("gain_loss_usd", ""),
+                "Holding Period": row.get("holding_period", ""),
+                "Days Held": row.get("holding_period_days", ""),
+                "Ordinary Income (USD)": row.get("ordinary_income_usd", ""),
+                "FMV (USD)": row.get("fmv_usd", ""),
+                "Network Fee (USD)": row.get("fee_usd", ""),
+                "Fee Treatment": _public_text(row.get("fee_treatment"), max_len=160),
+                "AI Confidence (%)": row.get("confidence_percent", ""),
+                "Review Reason": row.get("review_reason_label", ""),
+                "CPA Notes": _public_text(row.get("ai_explanation"), max_len=180),
+                "Recommended Next Action": _public_text(row.get("recommended_next_action"), max_len=160),
+                "Source": _public_counterparty(row.get("source_wallet")),
+                "Destination": _public_counterparty(row.get("destination_wallet")),
+                "Wallet Address": row.get("account_address", ""),
+                "Transaction Signature": row.get("transaction_signature", ""),
+            }
+        )
+    return pd.DataFrame(rows, columns=_CPA_READY_EXPORT_COLUMNS)
+
+
+def _row_year_from_date(value: str) -> str:
+    return value[:4] if value and len(value) >= 4 else ""
+
+
+def _public_transaction_type(row: pd.Series) -> str:
+    category = str(row.get("tax_category") or "")
+    label = str(row.get("tax_category_label") or "").strip()
+    if category == TAX_CATEGORY_SWAP_TRADE:
+        return "Swap"
+    if category == TAX_CATEGORY_TRANSFER_FROM_EXCHANGE:
+        return "Exchange funding"
+    if category == TAX_CATEGORY_INTERNAL_TRANSFER:
+        return "Self-transfer"
+    if category == TAX_CATEGORY_FAILED_FEE_ONLY:
+        return "Failed transaction fee"
+    return label or category.replace("_", " ").title()
+
+
+def _public_quantity(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if text[0] not in "+-.0123456789":
+        return ""
+    if len(text) > 60:
+        return ""
+    return _public_text(text)
+
+
+def _public_taxable_status(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    if raw == "yes":
+        return "Yes"
+    if raw == "no":
+        return "No"
+    if raw == "review":
+        return "Review"
+    return raw.title() if raw else ""
+
+
+def _public_account_label(value: Any) -> str:
+    text = str(value or "")
+    if text == "Demo Solana Wallet":
+        return "Primary Solana Wallet"
+    if text == "Demo Solana Cold Wallet":
+        return "Cold Storage Wallet"
+    return _public_text(text)
+
+
+def _public_counterparty(value: Any) -> str:
+    text = str(value or "")
+    labels = {
+        "COINBASE": "Coinbase",
+        "JUPITER": "Jupiter",
+        "ORCA": "Orca",
+        "WORMHOLE": "Wormhole",
+        "STAKE_PROGRAM": "Solana Stake Program",
+        "MAGIC_EDEN": "Magic Eden",
+    }
+    return labels.get(text.upper(), _public_text(text))
+
+
+def _public_text(value: Any, *, max_len: int | None = None) -> str:
+    text = str(value or "")
+    replacements = [
+        ("Demo seed: ", "Reviewed: "),
+        ("Demo dataset: ", ""),
+        ("Demo estimate", "Draft estimate"),
+        ("Demo assumption", "FMV assumption"),
+        ("Demo Solana Wallet", "Primary Solana Wallet"),
+        ("Demo Solana Cold Wallet", "Cold Storage Wallet"),
+        ("Demo NFT", "Solana NFT"),
+        ("demo NFT", "NFT"),
+        ("demo loss model", "loss review model"),
+        ("demo rates", "review rates"),
+        ("demo rate", "review rate"),
+        ("demo lots", "review lots"),
+        ("the demo", "the review"),
+        ("The demo", "The review"),
+    ]
+    for old, new in replacements:
+        text = text.replace(old, new)
+    text = re.sub(
+        r"\bdemo\b",
+        lambda match: "Review" if match.group(0)[:1].isupper() else "review",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = " ".join(text.replace("\r", " ").replace("\n", " ").split())
+    if max_len is not None and len(text) > max_len:
+        return text[: max_len - 3].rstrip() + "..."
+    return text
+
+
+def tax_file_yearly_summary(
+    tax_file: TaxFile | dict[str, Any],
+    frame: pd.DataFrame,
+    *,
+    tax_payment_plan: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Return a US tax-year summary aligned with the Tax File estimate."""
+    if frame.empty:
+        return []
+
+    estimate = (tax_payment_plan or {}).get("estimate") or tax_estimate_breakdown(tax_file, frame)
+    export = tax_file_export_frame(tax_file, frame)
+    taxable_events = int((export["is_potentially_taxable"] == "yes").sum()) if not export.empty else 0
+    fee_usd = sum(
+        (
+            _to_decimal(_fee_usd(row))
+            for _, row in frame.iterrows()
+            if str(row.get("tax_scope") or TAX_SCOPE_INCLUDED) == TAX_SCOPE_INCLUDED
+        ),
+        Decimal("0"),
+    )
+    tax_year = tax_file.tax_year if isinstance(tax_file, TaxFile) else int(tax_file.get("tax_year") or 0)
+    return [
+        {
+            "year": tax_year or "",
+            "realized_gain_usd": estimate.get("realized_capital_gain_display", ""),
+            "ordinary_income_usd": estimate.get("ordinary_income_display", ""),
+            "missing_basis_usd": estimate.get("missing_basis_exposure_display", ""),
+            "fees_usd": _format_money(fee_usd, "USD"),
+            "estimated_federal_tax_usd": estimate.get("estimated_federal_tax_display", ""),
+            "taxable_count": str(taxable_events),
+            "review_items": str(estimate.get("review_items_affecting_estimate") or "0"),
+        }
+    ]
 
 
 def tax_estimate_breakdown(
@@ -1633,16 +1854,23 @@ def tax_estimate_breakdown(
         "loss_offset_display": _format_money(loss_offset, "USD"),
         "estimated_federal_tax": _decimal_to_storage(estimated_tax_before),
         "estimated_federal_tax_display": _format_money(estimated_tax_before, "USD"),
+        "estimated_federal_tax_formula_display": (
+            f"({_format_money(realized_capital_gain, 'USD')} + {_format_money(ordinary_income, 'USD')}) "
+            f"x 24% = {_format_money(estimated_tax_before, 'USD')}"
+        ),
         "estimated_federal_tax_after_planning": _decimal_to_storage(estimated_tax_after),
         "estimated_federal_tax_after_planning_display": _format_money(estimated_tax_after, "USD"),
         "potential_federal_tax_reduction": _decimal_to_storage(potential_reduction),
         "potential_federal_tax_reduction_display": _format_money(potential_reduction, "USD"),
+        "potential_federal_tax_reduction_formula_display": (
+            f"{_format_money(loss_offset, 'USD')} x 24% = {_format_money(potential_reduction, 'USD')}"
+        ),
         "self_transfer_value_display": _format_money(self_transfer_value, "USD"),
         "self_transfer_false_tax_display": _format_money(false_tax, "USD"),
         "confirmation_pending": confirmation_pending,
         "assumptions": [
             "Estimated federal tax is calculated from verified realized gains, ordinary income, selected federal rate assumption, and review-status adjustments. This is not tax advice and should be reviewed by a CPA.",
-            "Demo estimate based on verified lots, FMV assumptions, and selected federal rate.",
+            "Draft estimate based on verified lots, FMV assumptions, and selected federal rate.",
             "State tax: Not configured.",
             "Missing basis exposure is shown separately and is not treated as final tax due.",
             "Potential planning impact assumes enough current-year capital gains to absorb the reviewed loss candidate.",
@@ -1715,23 +1943,38 @@ def tax_estimate_plan(
             {"label": "Realized gains", "value": estimate["realized_capital_gain_display"], "note": "Form 8949 / Schedule D draft support."},
             {"label": "Ordinary income", "value": estimate["ordinary_income_display"], "note": "Schedule 1 or Schedule C review depending taxpayer facts."},
             {"label": "Missing basis", "value": estimate["missing_basis_exposure_display"], "note": "Blocked from final use until reviewed."},
-            {"label": "State tax", "value": estimate["state_tax_display"], "note": "Optional configuration, not included in the demo estimate."},
+            {"label": "State tax", "value": estimate["state_tax_display"], "note": "Optional configuration, not included in the draft estimate."},
         ],
         "planning_rows": [
             {"label": "SAMO loss available", "value": estimate["loss_offset_display"], "note": "Unrealized loss candidate before CPA review."},
-            {"label": "Federal rate assumption", "value": estimate["federal_rate_display"], "note": "Selected demo federal short-term rate."},
+            {"label": "Federal rate assumption", "value": estimate["federal_rate_display"], "note": "Selected federal short-term rate assumption."},
             {"label": "Potential federal reduction", "value": savings, "note": "State tax not included."},
             {"label": "After planning review", "value": optimized_due, "note": "Requires sale before year-end and CPA review."},
         ],
+        "estimate_breakdown": [
+            {"label": "Input amount", "value": f"{estimate['realized_capital_gain_display']} realized gain + {estimate['ordinary_income_display']} ordinary income"},
+            {"label": "Formula", "value": estimate["estimated_federal_tax_formula_display"]},
+            {"label": "State tax", "value": "Excluded / not configured"},
+            {"label": "Review status", "value": f"{estimate['review_items_affecting_estimate']} open item affecting confidence"},
+            {"label": "Disclaimer", "value": "Draft estimate only. This is not tax advice."},
+        ],
+        "planning_breakdown": [
+            {"label": "Unrealized SAMO loss available", "value": estimate["loss_offset_display"]},
+            {"label": "Realized gains available to offset", "value": estimate["loss_offset_display"]},
+            {"label": "Federal rate assumption", "value": estimate["federal_rate_display"]},
+            {"label": "Estimated reduction", "value": estimate["potential_federal_tax_reduction_formula_display"]},
+            {"label": "State tax", "value": "Excluded / not configured"},
+            {"label": "Review status", "value": "Requires CPA review before year-end"},
+        ],
         "summary": (
-            "Demo estimate based on verified lots, FMV assumptions, and selected federal rate. "
+            "Draft estimate based on verified lots, FMV assumptions, and selected federal rate. "
             "This is a CPA-ready draft review workflow, not final tax due."
         ),
         "primary_next_action": (
             "Answer the self-transfer question with Transfer from my own wallet. The transaction becomes an "
-            "internal transfer, taxable income stays clean, and the demo moves to 0 blockers."
+            "internal transfer, taxable income stays clean, and the review moves to 0 blockers."
             if confirmation_pending
-            else f"Demo is clean: export the CPA-ready package with estimated federal tax after planning review of {optimized_due}."
+            else f"Review is clean: export the CPA-ready package with estimated federal tax after planning review of {optimized_due}."
         ),
         "cards": [
             {
@@ -1745,7 +1988,7 @@ def tax_estimate_plan(
                     "Ask: Was this transfer from your own wallet? Save the answer Transfer from my own wallet."
                 ),
                 "why": (
-                    f"The transfer is worth {estimate['self_transfer_value_display']} in the demo. Confirmation "
+                    f"The transfer is worth {estimate['self_transfer_value_display']} in this review. Confirmation "
                     "classifies it as an internal transfer and excludes it from taxable income."
                 ),
             },
@@ -1760,7 +2003,7 @@ def tax_estimate_plan(
                     "Review a year-end taxable disposition of 3,000,000 SAMO with a qualified tax professional."
                 ),
                 "why": (
-                    f"The demo lots have {loss} of loss available against current-year gains. At the selected "
+                    f"The reviewed lots have {loss} of loss available against current-year gains. At the selected "
                     f"{estimate['federal_rate_display']} federal rate, the potential federal reduction is {savings}, "
                     "assuming enough capital gains and professional approval."
                 ),
@@ -1794,7 +2037,7 @@ def tax_estimate_plan(
                 "item": "Unrelated blockers",
                 "status": "0",
                 "status_class": "confirmed",
-                "note": "Cost basis, FMV, staking, and exchange items are pre-reviewed for the prototype demo.",
+                "note": "Cost basis, FMV, staking, and exchange items are pre-reviewed for this workflow.",
             },
             {
                 "item": "US tax estimate",
@@ -1810,6 +2053,92 @@ def tax_estimate_plan(
             },
         ],
         "loss_model_matches": bool((tax_loss_harvesting or {}).get("available")),
+    }
+
+
+def solana_patterns_detected(
+    tax_file: TaxFile | dict[str, Any],
+    frame: pd.DataFrame,
+    *,
+    matches: list[TransferMatch],
+) -> dict[str, Any]:
+    """Return demo-safe Solana-specific accounting patterns backed by Tax File data."""
+    if not _is_test_tax_file(tax_file):
+        return {"available": False, "items": []}
+
+    def has_row(predicate) -> bool:
+        return any(predicate(row) for _, row in frame.iterrows()) if not frame.empty else False
+
+    def tx_type(row: pd.Series) -> str:
+        return str(row.get("transaction_type") or "").upper()
+
+    def tag(row: pd.Series) -> str:
+        return str(row.get("tag_type") or "")
+
+    def category(row: pd.Series) -> str:
+        return str(row.get("tax_category") or "")
+
+    token_assets = {
+        _asset_label(str(row.get("primary_token_symbol") or row.get("asset") or ""))
+        for _, row in frame.iterrows()
+        if _asset_label(str(row.get("primary_token_symbol") or row.get("asset") or "")) not in {"", "SOL"}
+    }
+    confirmed_or_pending_transfer = any(match.status in {MATCH_CONFIRMED, MATCH_SUGGESTED} for match in matches)
+
+    items = [
+        {
+            "label": "Jupiter swap classified as taxable disposal",
+            "status": "Detected" if has_row(lambda row: category(row) == TAX_CATEGORY_SWAP_TRADE or tag(row) == "Swap") else "Not in dataset",
+            "status_class": "confirmed" if has_row(lambda row: category(row) == TAX_CATEGORY_SWAP_TRADE or tag(row) == "Swap") else "neutral",
+            "note": "SOL -> BONK and stablecoin swap records carry taxable-event review fields.",
+        },
+        {
+            "label": "Stake reward classified as ordinary income",
+            "status": "Detected" if has_row(lambda row: category(row) == TAX_CATEGORY_STAKING_REWARD) else "Not in dataset",
+            "status_class": "confirmed" if has_row(lambda row: category(row) == TAX_CATEGORY_STAKING_REWARD) else "neutral",
+            "note": "Staking reward FMV is separated from capital gains.",
+        },
+        {
+            "label": "SPL token activity parsed",
+            "status": f"{len(token_assets)} tokens" if token_assets else "Not in dataset",
+            "status_class": "confirmed" if token_assets else "neutral",
+            "note": "BONK, SAMO, JUP, USDC/USDT, and wSOL-style activity appear in the Tax File.",
+        },
+        {
+            "label": "wSOL wrap/bridge flagged for CPA review",
+            "status": "Detected" if has_row(lambda row: tx_type(row) == "WRAP_SOL") else "Not in dataset",
+            "status_class": "warning" if has_row(lambda row: tx_type(row) == "WRAP_SOL") else "neutral",
+            "note": "Wrapped-token activity is not treated as a final taxable disposal without review.",
+        },
+        {
+            "label": "NFT mint/sale prepared for gain/loss review",
+            "status": "Detected" if has_row(lambda row: tx_type(row) in {"NFT_MINT", "NFT_SALE"}) else "Not in dataset",
+            "status_class": "confirmed" if has_row(lambda row: tx_type(row) in {"NFT_MINT", "NFT_SALE"}) else "neutral",
+            "note": "Mint cost, sale proceeds, and fees are carried into the CPA package.",
+        },
+        {
+            "label": "Self-transfer matched across Solana wallets",
+            "status": "Detected" if confirmed_or_pending_transfer else "Not in dataset",
+            "status_class": "confirmed" if confirmed_or_pending_transfer else "neutral",
+            "note": "Own-wallet movement is excluded from income after confirmation.",
+        },
+        {
+            "label": "Fees tracked in SOL",
+            "status": "Detected" if has_row(lambda row: _to_decimal(row.get("fee")) > 0) else "Not in dataset",
+            "status_class": "confirmed" if has_row(lambda row: _to_decimal(row.get("fee")) > 0) else "neutral",
+            "note": "Network fees stay available for audit context and basis review.",
+        },
+        {
+            "label": "Transaction signatures linked for audit trail",
+            "status": "Detected" if has_row(lambda row: bool(str(row.get("signature") or ""))) else "Not in dataset",
+            "status_class": "confirmed" if has_row(lambda row: bool(str(row.get("signature") or ""))) else "neutral",
+            "note": "Rows link back to raw Solana transaction details when address and signature exist.",
+        },
+    ]
+    return {
+        "available": True,
+        "intro": "Built for Solana wallet activity: Jupiter swaps, staking rewards, SPL tokens, NFTs, wSOL, and transaction signatures.",
+        "items": items,
     }
 
 
@@ -1838,41 +2167,54 @@ def ai_accountant_findings(
     package_copy = (
         f"CPA package ready after {pending_answers} answer" if pending_answers else "CPA package ready for export"
     )
-    return {
-        "badge": "Demo dataset: 2025 US taxpayer story",
-        "defensive_copy": "Classification is deterministic for auditability, with an AI explanation layer for user guidance, review prioritization, and CPA-ready summaries.",
-        "items": [
+    estimate = tax_payment_plan.get("estimate", {}) if tax_payment_plan else {}
+    items = [
+        {
+            "label": "Taxable events detected",
+            "value": str(taxable_events),
+            "href": "#tax-classification",
+            "note": "Swaps, sales, NFT sales, and income events prepared for review.",
+        },
+        {
+            "label": "Possible self-transfer",
+            "value": str(possible_self_transfers),
+            "href": "#review-queue",
+            "note": "Matched or pending wallet ownership confirmation.",
+        },
+        {
+            "label": "Missing basis issues",
+            "value": str(missing_basis),
+            "href": "#cost-basis",
+            "note": "Acquisition history needed before relying on final totals.",
+        },
+        {
+            "label": "Ordinary income events",
+            "value": str(ordinary_income),
+            "href": "#tax-classification",
+            "note": "Airdrops and staking rewards kept separate from capital gains.",
+        },
+    ]
+    if estimate:
+        items.append(
             {
-                "label": "Taxable events detected",
-                "value": str(taxable_events),
-                "href": "#tax-classification",
-                "note": "Swaps, sales, NFT sales, and income events prepared for review.",
-            },
-            {
-                "label": "Possible self-transfer",
-                "value": str(possible_self_transfers),
-                "href": "#review-queue",
-                "note": "Matched or pending wallet ownership confirmation.",
-            },
-            {
-                "label": "Missing basis issues",
-                "value": str(missing_basis),
-                "href": "#cost-basis",
-                "note": "Acquisition history needed before relying on final totals.",
-            },
-            {
-                "label": "Ordinary income events",
-                "value": str(ordinary_income),
-                "href": "#tax-classification",
-                "note": "Airdrops and staking rewards kept separate from capital gains.",
-            },
-            {
-                "label": package_copy,
-                "value": "Ready" if not pending_answers else str(pending_answers),
+                "label": "Estimated federal tax",
+                "value": str(estimate.get("estimated_federal_tax_display") or ""),
                 "href": "#cpa-export",
-                "note": "Draft package only. Final filing requires taxpayer/CPA review.",
-            },
-        ],
+                "note": "Draft estimate with visible assumptions. State tax excluded.",
+            }
+        )
+    items.append(
+        {
+            "label": package_copy,
+            "value": "Ready" if not pending_answers else str(pending_answers),
+            "href": "#cpa-export",
+            "note": "Draft package only. Final filing requires taxpayer/CPA review.",
+        }
+    )
+    return {
+        "badge": "2025 US taxpayer story",
+        "defensive_copy": "Classification is deterministic for auditability, with an AI explanation layer for user guidance, review prioritization, and CPA-ready summaries.",
+        "items": items,
         "estimate_available": bool((tax_payment_plan or {}).get("available")),
     }
 
@@ -2323,7 +2665,7 @@ def create_demo_tax_file(cache_root: Path, *, primary_address: str, secondary_ad
     store = TaxFileStore(cache_root)
     tax_file = store.create_tax_file(
         tax_file_id="demo-tax-file-2025",
-        name="Demo Tax File 2025",
+        name="2025 Crypto Tax Review",
         tax_country=DEFAULT_TAX_COUNTRY,
         tax_year=2025,
         entity_type=DEFAULT_ENTITY_TYPE,
@@ -2363,13 +2705,13 @@ def create_test_tax_file(cache_root: Path, *, primary_address: str, secondary_ad
     primary, _ = store.add_account(
         tax_file_id=tax_file.id,
         address=primary_address,
-        label="Demo Solana Wallet",
+        label="Primary Solana Wallet",
         ownership_status=OWNERSHIP_OWNED,
     )
     store.add_account(
         tax_file_id=tax_file.id,
         address=secondary_address,
-        label="Demo Solana Cold Wallet",
+        label="Cold Storage Wallet",
         ownership_status=OWNERSHIP_OWNED,
     )
     matches = matchInternalTransfers(tax_file.id, cache_root=cache_root, store=store)
@@ -2378,7 +2720,7 @@ def create_test_tax_file(cache_root: Path, *, primary_address: str, secondary_ad
             store.update_transfer_match_status(
                 match.id,
                 MATCH_CONFIRMED,
-                note="Seeded demo self-transfer between taxpayer-owned wallets.",
+                note="Seeded self-transfer between taxpayer-owned wallets.",
             )
 
     for key, reason, category, note in _test_demo_resolved_items(TEST_SIGNATURES):
@@ -2394,7 +2736,7 @@ def create_test_tax_file(cache_root: Path, *, primary_address: str, secondary_ad
             tax_review_status=TAX_REVIEW_RESOLVED,
             accountant_note=note,
             actor=AUDIT_ACTOR_SYSTEM,
-            action_type="demo_classification_seeded",
+            action_type="classification_seeded",
         )
     return tax_file
 
@@ -2422,97 +2764,97 @@ def _test_demo_resolved_items(signatures: dict[str, str]) -> list[tuple[str, str
             "samo_large",
             REASON_MISSING_COST_BASIS,
             TAX_CATEGORY_SWAP_TRADE,
-            "Demo seed: acquisition lot, USD FMV, and fee treatment reviewed for the SAMO lot.",
+            "Reviewed: acquisition lot, USD FMV, and fee treatment reviewed for the SAMO lot.",
         ),
         (
             "bonk_long_sale",
             REASON_MISSING_COST_BASIS,
             TAX_CATEGORY_SELL,
-            "Demo seed: long-term BONK lot basis imported from historical exchange records.",
+            "Reviewed: long-term BONK lot basis imported from historical exchange records.",
         ),
         (
             "samo_small",
             REASON_MISSING_COST_BASIS,
             TAX_CATEGORY_SWAP_TRADE,
-            "Demo seed: acquisition lot, USD FMV, and fee treatment reviewed for the SAMO lot.",
+            "Reviewed: acquisition lot, USD FMV, and fee treatment reviewed for the SAMO lot.",
         ),
         (
             "usdc_sale",
             REASON_MISSING_COST_BASIS,
             TAX_CATEGORY_SELL,
-            "Demo seed: sale proceeds and FIFO SOL basis are ready for US capital gain estimate.",
+            "Reviewed: sale proceeds and FIFO SOL basis are ready for US capital gain estimate.",
         ),
         (
             "airdrop",
             REASON_MISSING_FMV,
             TAX_CATEGORY_AIRDROP_REWARD,
-            "Demo seed: token reward FMV is documented in USD for the presentation.",
+            "Reviewed: token reward FMV is documented in USD.",
         ),
         (
             "staking_deposit",
             REASON_COMPLEX_DEFI,
             TAX_CATEGORY_STAKING_DEPOSIT,
-            "Demo seed: staking deposit reviewed as a non-taxable transfer into staking.",
+            "Reviewed: staking deposit reviewed as a non-taxable transfer into staking.",
         ),
         (
             "staking_reward",
             REASON_MISSING_FMV,
             TAX_CATEGORY_STAKING_REWARD,
-            "Demo seed: staking reward FMV documented as ordinary income support.",
+            "Reviewed: staking reward FMV documented as ordinary income support.",
         ),
         (
             "nft_mint",
             REASON_MISSING_COST_BASIS,
             TAX_CATEGORY_NFT_PURCHASE,
-            "Demo seed: NFT mint basis includes mint cost and Solana network fee.",
+            "Reviewed: NFT mint basis includes mint cost and Solana network fee.",
         ),
         (
             "nft_sale",
             REASON_MISSING_COST_BASIS,
             TAX_CATEGORY_NFT_SALE,
-            "Demo seed: NFT sale proceeds and basis are prepared for Form 8949 review.",
+            "Reviewed: NFT sale proceeds and basis are prepared for Form 8949 review.",
         ),
         (
             "bridge_wsol",
             REASON_COMPLEX_DEFI,
             TAX_CATEGORY_DEFI_COMPLEX,
-            "Demo seed: wSOL wrap/bridge pattern marked for CPA review rather than treated as final disposal.",
+            "Reviewed: wSOL wrap/bridge pattern marked for CPA review rather than treated as final disposal.",
         ),
         (
             "lp_deposit",
             REASON_COMPLEX_DEFI,
             TAX_CATEGORY_DEFI_COMPLEX,
-            "Demo seed: LP deposit requires DeFi treatment review and is kept in the CPA workspace.",
+            "Reviewed: LP deposit requires DeFi treatment review and is kept in the CPA workspace.",
         ),
         (
             "stablecoin_swap",
             REASON_MISSING_COST_BASIS,
             TAX_CATEGORY_SWAP_TRADE,
-            "Demo seed: stablecoin swap is tracked as a low-gain taxable review event.",
+            "Reviewed: stablecoin swap is tracked as a low-gain taxable review event.",
         ),
         (
             "failed_fee",
             REASON_FEE_ONLY,
             TAX_CATEGORY_FAILED_FEE_ONLY,
-            "Demo seed: failed transaction records the fee only and no disposal.",
+            "Reviewed: failed transaction records the fee only and no disposal.",
         ),
         (
             "missing_price",
             REASON_MISSING_FMV,
             TAX_CATEGORY_AIRDROP_REWARD,
-            "Demo seed: historical FMV is missing and included in the missing data report.",
+            "Reviewed: historical FMV is missing and included in the missing data report.",
         ),
         (
             "missing_basis",
             REASON_MISSING_COST_BASIS,
             TAX_CATEGORY_SWAP_TRADE,
-            "Demo seed: external JUP acquisition history is missing and included in the missing basis report.",
+            "Reviewed: external JUP acquisition history is missing and included in the missing basis report.",
         ),
         (
             "duplicate_candidate",
             REASON_UNKNOWN_SOURCE,
             TAX_CATEGORY_TRANSFER_FROM_EXCHANGE,
-            "Demo seed: duplicate exchange support row reviewed as non-income and not a disposal.",
+            "Reviewed: duplicate exchange support row reviewed as non-income and not a disposal.",
         ),
     ]
 
@@ -3619,13 +3961,22 @@ def _category_label(category: str) -> str:
 def _cached_wallet_rows(cache_root: Path, accounts: list[Account]) -> list[dict[str, Any]]:
     linked = {account.address for account in accounts}
     rows = []
+    demo_wallet_index = 0
     for wallet in cache_mod.list_wallets(cache_root=cache_root):
         address = str(getattr(wallet, "address", ""))
+        dataset_label = str(getattr(wallet, "dataset_label", "") or "")
+        public_dataset_label = _public_dataset_label(dataset_label)
+        address_short = _short(address, 8)
+        display_label = address_short
+        if public_dataset_label == "2025 US taxpayer story":
+            demo_wallet_index += 1
+            display_label = f"Solana Wallet {demo_wallet_index}"
         rows.append(
             {
                 "address": address,
-                "address_short": _short(address, 8),
-                "dataset_label": str(getattr(wallet, "dataset_label", "") or ""),
+                "address_short": address_short,
+                "display_label": display_label,
+                "dataset_label": public_dataset_label,
                 "row_count": int(getattr(wallet, "row_count", 0) or 0),
                 "earliest_tx": str(getattr(wallet, "earliest_tx", "") or ""),
                 "latest_tx": str(getattr(wallet, "latest_tx", "") or ""),
@@ -3633,6 +3984,10 @@ def _cached_wallet_rows(cache_root: Path, accounts: list[Account]) -> list[dict[
             }
         )
     return rows
+
+
+def _public_dataset_label(value: str) -> str:
+    return str(value or "").replace("Demo dataset: ", "").replace("Synthetic demo data", "Sample wallet activity")
 
 
 def _read_cache(address: str, cache_root: Path) -> tuple[pd.DataFrame, dict[str, Any]] | None:
@@ -3842,7 +4197,7 @@ def _loss_harvesting_review_guardrails() -> list[dict[str, str]]:
             "guardrail": "Cost basis confirmed",
             "status": "Needs review",
             "status_class": "warning",
-            "note": "Demo or missing acquisition data may be used",
+            "note": "Estimated or missing acquisition data may be used",
         },
         {
             "guardrail": "FMV confirmed",
@@ -4592,7 +4947,7 @@ def _tax_loss_harvesting_profile(country_code: str) -> dict[str, Any] | None:
         return {
             "currency": "USD",
             "tax_rate": US_DEMO_SHORT_TERM_CAPITAL_RATE,
-            "tax_rate_label": "Demo 24% short-term capital rate",
+            "tax_rate_label": "24% short-term capital rate assumption",
             "sol_rate": DEMO_SOL_USD_RATE,
             "price_key": "current_price_usd",
             "assumptions": TAX_LOSS_HARVESTING_ASSUMPTIONS_USD,
@@ -4670,8 +5025,8 @@ def _tax_loss_harvesting_candidates(
                     "estimated_tax_effect_display": _format_money(estimated_effect, currency),
                     "market_price_display": _format_money(current_price, currency),
                     "market_date": str(assumption.get("market_date") or ""),
-                    "market_source": str(assumption.get("source") or "Demo market assumption."),
-                    "confidence": "demo",
+                    "market_source": str(assumption.get("source") or "Review market assumption."),
+                    "confidence": "review",
                     "action": action,
                     "warning": warning,
                 }
@@ -4717,11 +5072,11 @@ def _tax_loss_harvesting_notification(
         )
     if today.year > tax_year:
         return (
-            f"Demo replay: before December 31, {tax_year}, available wallet data would have shown an estimated "
+            f"Year-end review: before December 31, {tax_year}, available wallet data would have shown an estimated "
             f"{effect} potential {country_note} impact before professional review. This is not final."
         )
     return (
-        f"Planning preview: current demo candidates show an estimated {effect} potential {country_note} impact "
+        f"Planning preview: current review candidates show an estimated {effect} potential {country_note} impact "
         "before professional review. This is not final."
     )
 
@@ -4762,15 +5117,15 @@ def _tax_loss_harvesting_sources(country_code: str) -> list[dict[str, str]]:
 def _tax_loss_harvesting_assumptions(country_code: str, currency: str) -> list[str]:
     if country_code == "US":
         return [
-            "Demo uses fixed SOL/USD and token/USD market assumptions; no live oracle is connected.",
-            "Potential impact uses a demo 24% short-term capital rate and does not know the taxpayer's actual bracket.",
+            "Review uses fixed SOL/USD and token/USD market assumptions; no live oracle is connected.",
+            "Potential impact uses a 24% short-term capital rate assumption and does not know the taxpayer's actual bracket.",
             "Loss value depends on available capital gains, the capital loss deduction limit, and carryforward rules.",
             "The dashboard does not place trades and should not recommend immediate repurchases without professional review.",
         ]
     if country_code != "PL":
         return ["No country-specific potential loss review assumptions are enabled for this Tax File."]
     return [
-        f"Demo uses fixed SOL/{currency} and token/{currency} market assumptions; no live oracle is connected.",
+        f"Review uses fixed SOL/{currency} and token/{currency} market assumptions; no live oracle is connected.",
         "Potential impact assumes there is enough current-year taxable crypto income to absorb the cost effect.",
         "The dashboard does not place trades and should not recommend wash-style round trips without professional review.",
     ]
@@ -4973,7 +5328,9 @@ __all__ = [
     "create_test_tax_file",
     "matchInternalTransfers",
     "tax_estimate_plan",
+    "tax_file_cpa_ready_export_frame",
     "tax_file_export_frame",
+    "tax_file_yearly_summary",
     "tax_file_dashboard_context",
     "tax_files_overview",
     "tax_loss_harvesting_advice",

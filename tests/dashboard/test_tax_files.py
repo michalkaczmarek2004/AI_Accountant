@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import io
 import shutil
 import sys
 import unittest
@@ -392,7 +394,7 @@ class TaxFileRouteTests(unittest.TestCase):
         self.assertIn(b"1 User Confirmation Needed", detail.data)
         self.assertIn(b"Was this transfer from your own wallet?", detail.data)
         self.assertIn(b"Confirm: Transfer from my own wallet", detail.data)
-        self.assertIn(b"Presentation Readiness", detail.data)
+        self.assertIn(b"Tax Review Readiness", detail.data)
         self.assertIn(b"Pending User Confirmation", detail.data)
         self.assertIn(b"Client Questions", detail.data)
         self.assertIn(b"Action Summary", detail.data)
@@ -404,7 +406,16 @@ class TaxFileRouteTests(unittest.TestCase):
         self.assertIn(b"$4,848", detail.data)
         self.assertIn(b"$1,324.8", detail.data)
         self.assertIn(b"AI Accountant Findings", detail.data)
-        self.assertIn(b"Demo dataset: 2025 US taxpayer story", detail.data)
+        self.assertIn(b"2025 US taxpayer story", detail.data)
+        self.assertIn(b"Review Mode", detail.data)
+        self.assertIn(b"Solana Patterns Detected", detail.data)
+        self.assertIn(b"Jupiter swap classified as taxable disposal", detail.data)
+        self.assertIn(b"wSOL wrap/bridge flagged for CPA review", detail.data)
+        self.assertIn(b"Reset Presentation State", detail.data)
+        self.assertIn(b"From Solana wallet chaos to CPA-ready tax review in minutes.", detail.data)
+        self.assertIn(b"This package is designed for taxpayer/CPA review", detail.data)
+        self.assertNotIn(b"test7GNc", detail.data)
+        self.assertNotIn(b"testMxCW", detail.data)
         self.assertNotIn(b"No items in this group", detail.data)
         self.assertNotIn(b"PLN", detail.data)
         self.assertNotIn(b"PIT-38", detail.data)
@@ -422,6 +433,11 @@ class TaxFileRouteTests(unittest.TestCase):
         self.assertIn(b"Estimated federal tax", tax.data)
         self.assertIn(b"$6,172.8", tax.data)
         self.assertIn(b"Estimate assumptions", tax.data)
+        self.assertIn(b"Estimated federal tax breakdown", tax.data)
+        self.assertIn(b"Potential federal tax reduction breakdown", tax.data)
+        self.assertIn(b"$20,200 x 24% = $4,848", tax.data)
+        self.assertIn(b"State tax", tax.data)
+        self.assertIn(b"Excluded / not configured", tax.data)
         self.assertIn(b"Tax Reporting", tax.data)
         self.assertIn(b"Tax Planning", tax.data)
         self.assertIn(b"CPA-ready package", tax.data)
@@ -437,6 +453,90 @@ class TaxFileRouteTests(unittest.TestCase):
         self.assertEqual(export.status_code, 200)
         self.assertIn(b'"cost_basis"', export.data)
         self.assertIn(b'"confidence_percent"', export.data)
+
+    def test_presenter_mode_smoke_flow(self) -> None:
+        landing = self.client.get("/")
+        self.assertEqual(landing.status_code, 200)
+        self.assertIn(b"AI Accountant for US Crypto Taxes", landing.data)
+        self.assertIn(b"Run US Tax Review", landing.data)
+
+        start = self.client.post("/demo")
+        self.assertEqual(start.status_code, 303)
+        self.assertIn(f"/tax-files/{TEST_TAX_FILE_ID}", start.headers["Location"])
+
+        landing_after_demo = self.client.get("/")
+        self.assertEqual(landing_after_demo.status_code, 200)
+        self.assertIn(b"View cached wallets", landing_after_demo.data)
+        self.assertNotIn(b"test7GNc", landing_after_demo.data)
+        self.assertNotIn(b"testMxCW", landing_after_demo.data)
+
+        wallets_after_demo = self.client.get("/wallets")
+        self.assertEqual(wallets_after_demo.status_code, 200)
+        self.assertIn(b"Cached wallets", wallets_after_demo.data)
+        self.assertIn(b"Solana Wallet", wallets_after_demo.data)
+        self.assertNotIn(b"test7GNc", wallets_after_demo.data)
+        self.assertNotIn(b"testMxCW", wallets_after_demo.data)
+
+        detail = self.client.get(start.headers["Location"])
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn(b"AI Accountant Findings", detail.data)
+        self.assertIn(b"1 User Confirmation Needed", detail.data)
+        self.assertIn(b"Solana Patterns Detected", detail.data)
+        self.assertNotIn(b"test-tax-file-2025", detail.data)
+        self.assertNotIn(b"test7GNc", detail.data)
+        self.assertNotIn(b"testMxCW", detail.data)
+        self.assertNotIn(b"No items in this group", detail.data)
+        self.assertNotIn(b"Traceback", detail.data)
+
+        ctx = tax_file_dashboard_context(TEST_TAX_FILE_ID, self.tmp)
+        question = next(item for item in ctx["client_questions"] if item["review_reason"] == "unknown_source")
+        raw = self.client.get(f"/wallet/{TEST_WALLET_ADDRESS}/tx/{'K' * 88}")
+        self.assertEqual(raw.status_code, 200)
+
+        answer = self.client.post(
+            f"/tax-files/{TEST_TAX_FILE_ID}/review/{question['id']}/answer",
+            data={
+                "account_id": question["account_id"],
+                "transaction_id": question["signature"],
+                "review_reason": question["review_reason"],
+                "direction": question["direction"],
+                "client_question": question["client_question"],
+                "client_answer": "own_wallet",
+            },
+        )
+        self.assertEqual(answer.status_code, 303)
+        after = self.client.get(answer.headers["Location"])
+        self.assertEqual(after.status_code, 200)
+        self.assertIn(b"Self-Transfer Confirmed", after.data)
+        self.assertIn(b"Your confirmation was added to the audit trail", after.data)
+        self.assertIn(b"0 blockers", after.data)
+        self.assertNotIn(b"1 User Confirmation Needed", after.data)
+
+        tax = self.client.get(f"/tax-files/{TEST_TAX_FILE_ID}/tax")
+        self.assertEqual(tax.status_code, 200)
+        self.assertIn(b"US Tax Estimate &amp; Optimization Plan", tax.data)
+        self.assertIn(b"$4,848", tax.data)
+        self.assertIn(b"$20,200 x 24% = $4,848", tax.data)
+
+        export = self.client.get(f"/tax-files/{TEST_TAX_FILE_ID}/tax-export.csv")
+        self.assertEqual(export.status_code, 200)
+        text = export.data.decode("utf-8-sig")
+        lines = text.splitlines()
+        if lines and lines[0].startswith("sep="):
+            lines = lines[1:]
+        rows = list(csv.DictReader(io.StringIO("\n".join(lines))))
+        funding = next(row for row in rows if row["Transaction Signature"] == "G" * 88)
+        self.assertEqual(funding["Tax Category"], "Transfer from exchange")
+        self.assertEqual(funding["Taxable Event"], "No")
+        self.assertEqual(funding["Ordinary Income (USD)"], "")
+        self.assertNotIn("Demo", text)
+
+        reset = self.client.post("/demo/reset")
+        self.assertEqual(reset.status_code, 303)
+        reset_detail = self.client.get(reset.headers["Location"])
+        self.assertEqual(reset_detail.status_code, 200)
+        self.assertIn(b"Tax review reset to the initial review state.", reset_detail.data)
+        self.assertIn(b"1 User Confirmation Needed", reset_detail.data)
 
     def test_tax_files_create_form_uses_tax_country_dropdown(self) -> None:
         response = self.client.get("/tax-files")

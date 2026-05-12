@@ -8,7 +8,7 @@
     <p class="meta-line">Client-level accounting workspaces for connected Solana accounts.</p>
   </div>
   <div class="header-actions">
-    <a href="{{ url_for('landing') }}" class="button secondary">Wallets</a>
+    <a href="{{ url_for('wallets_route') }}" class="button secondary">Wallets</a>
     {% if show_archived %}
     <a href="{{ url_for('tax_files_route') }}" class="button secondary">Hide archived</a>
     {% else %}
@@ -24,7 +24,7 @@
 <section class="paste-form">
   <form method="post" action="{{ url_for('create_tax_file_route') }}" class="tax-file-create-form">
     <label>Name
-      <input type="text" name="name" placeholder="Demo Client {{ tax_year_default }}" required>
+      <input type="text" name="name" placeholder="Client {{ tax_year_default }} Tax Review" required>
     </label>
     <label>Tax year
       <input type="number" name="tax_year" value="{{ tax_year_default }}" min="2009" max="2100">
